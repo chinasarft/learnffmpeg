@@ -41,11 +41,11 @@ inityuv();
     //Method1 方法1.组合使用几个函数
     fmt_ctx = avformat_alloc_context();
     //Guess Format 猜格式
-    fmt = av_guess_format(NULL, "argv[1]", NULL);
+    fmt = av_guess_format(NULL, argv[1], NULL);
     fmt_ctx->oformat = fmt;
     
     //Method 2 方法2.更加自动化一些
-    //avformat_alloc_output_context2(&fmt_ctx, NULL, NULL, "argv[1]");
+    //avformat_alloc_output_context2(&fmt_ctx, NULL, NULL, argv[1]);
     //fmt = fmt_ctx->oformat;
     
     
@@ -66,15 +66,15 @@ inityuv();
     vstream->codec->width = 128;
     vstream->codec->height = 128;
     vstream->codec->time_base = (AVRational){1,25};
-    vstream->codec->gop_size = 10;
-    vstream->codec->max_b_frames = 3;
+    vstream->codec->gop_size = 5; //短视屏这个也不用设置很大
+    vstream->codec->max_b_frames = 0; //对于很短的视频来说设置bframe导致丢掉结尾的画面
     vstream->codec->qmin = 15;
     vstream->codec->qmax = 35;
     if(vstream->codec->codec_id == AV_CODEC_ID_H264){
         printf("set priv_data\n");
        av_opt_set(vstream->codec->priv_data, "preset", "slow", 0);
     }
-    av_dump_format(fmt_ctx, 0, "argv[1]", 1);
+    av_dump_format(fmt_ctx, 0, argv[1], 1);
 
     if (avcodec_open2(vstream->codec, c, NULL) < 0){
         printf("Failed to open encoder! \n");
@@ -82,7 +82,7 @@ inityuv();
      }  
     video_enc_ctx = vstream->codec;
 
-    if(avio_open(&fmt_ctx->pb, "argv[1]", AVIO_FLAG_READ_WRITE) < 0){
+    if(avio_open(&fmt_ctx->pb, argv[1], AVIO_FLAG_READ_WRITE) < 0){
         printf("avio_open my.pm4 fail\n");
         exit(3);
     }
@@ -111,7 +111,7 @@ inityuv();
         frame->data[1] = frame_buf+ y_size;  // U 
         frame->data[2] = frame_buf+ y_size*5/4; // V
         //PTS
-        frame->pts=i++;
+        frame->pts=i*90000/25; //转为mp4设置时间戳
         got_frame=0;
         //Encode 编码
         ret = avcodec_encode_video2(video_enc_ctx, &pkt,frame, &got_frame);
