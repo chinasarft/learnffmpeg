@@ -128,4 +128,5 @@ printf("width:%d height:%d\n", dec_ctx->width, dec_ctx->height);
         fclose(vfile);
     av_frame_free(&frame);
     av_free(video_dst_data[0]);
+	av_packet_unref(&pkt);
 }
