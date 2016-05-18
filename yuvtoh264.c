@@ -23,7 +23,7 @@ int main(int argc, char **argv){
     AVFormatContext *fmt_ctx = NULL;
     AVCodec * c;
     AVOutputFormat* fmt;
-    AVStream * mp4Stream;
+    AVStream * vstream;
     AVFrame *frame = NULL;
     AVCodecContext *video_enc_ctx = NULL;
     AVPacket pkt;
@@ -41,7 +41,7 @@ inityuv();
     fmt_ctx->oformat = fmt;
     
     //Method 2 方法2.更加自动化一些
-    //avformat_alloc_output_context2(&fmt_ctx, NULL, NULL, out_file);
+    //avformat_alloc_output_context2(&fmt_ctx, NULL, NULL, "b.h264");
     //fmt = fmt_ctx->oformat;
     
     
@@ -50,33 +50,33 @@ inityuv();
         printf("Can not find encoder! \n");
         exit(4);
     }
-    mp4Stream = avformat_new_stream(fmt_ctx, c);
-    if(mp4Stream == NULL){
+    vstream = avformat_new_stream(fmt_ctx, c);
+    if(vstream == NULL){
         printf("avformat_new_stream fail\n");
         exit(3);
     }
-    mp4Stream->time_base = (AVRational){1,25};
-    mp4Stream->codec->codec_id = AV_CODEC_ID_H264;
-    mp4Stream->codec->codec_type = AVMEDIA_TYPE_VIDEO;
-    mp4Stream->codec->pix_fmt = AV_PIX_FMT_YUV420P;
-    mp4Stream->codec->width = 128;
-    mp4Stream->codec->height = 128;
-    mp4Stream->codec->time_base = (AVRational){1,25};
-    mp4Stream->codec->gop_size = 10;
-    mp4Stream->codec->max_b_frames = 3;
-    mp4Stream->codec->qmin = 15;
-    mp4Stream->codec->qmax = 35;
-    if(mp4Stream->codec->codec_id == AV_CODEC_ID_H264){
+    vstream->time_base = (AVRational){1,25};
+    vstream->codec->codec_id = AV_CODEC_ID_H264;
+    vstream->codec->codec_type = AVMEDIA_TYPE_VIDEO;
+    vstream->codec->pix_fmt = AV_PIX_FMT_YUV420P;
+    vstream->codec->width = 128;
+    vstream->codec->height = 128;
+    vstream->codec->time_base = (AVRational){1,25};
+    vstream->codec->gop_size = 10;
+    vstream->codec->max_b_frames = 3;
+    vstream->codec->qmin = 15;
+    vstream->codec->qmax = 35;
+    if(vstream->codec->codec_id == AV_CODEC_ID_H264){
         printf("set priv_data\n");
-       av_opt_set(mp4Stream->codec->priv_data, "preset", "slow", 0);
+       av_opt_set(vstream->codec->priv_data, "preset", "slow", 0);
     }
     av_dump_format(fmt_ctx, 0, "b.h264", 1);
 
-    if (avcodec_open2(mp4Stream->codec, c, NULL) < 0){
+    if (avcodec_open2(vstream->codec, c, NULL) < 0){
         printf("Failed to open encoder! \n");
         exit(5);
      }  
-	video_enc_ctx = mp4Stream->codec;
+	video_enc_ctx = vstream->codec;
 
     if(avio_open(&fmt_ctx->pb, "b.h264", AVIO_FLAG_READ_WRITE) < 0){
         printf("avio_open my.pm4 fail\n");
@@ -88,7 +88,7 @@ inityuv();
     }
 
     frame = av_frame_alloc();
-    //size = avframe_get_size(video_enc_ctx->pix_fmt, video_enc_ctx->width, video_enc_ctx->height);
+    //avframe_get_size 这个函数已经不存在了
 	size = av_image_get_buffer_size(video_enc_ctx->pix_fmt, video_enc_ctx->width, video_enc_ctx->height, 1);
     frame_buf = (uint8_t *)av_malloc(size);
 	//avframe_fill avpicture_fill 这两个函数都废弃了
@@ -101,6 +101,7 @@ inityuv();
     pkt.data = NULL;
     pkt.size = 0;
 	int i = 0;
+	//yuv file还是要自己去读取，没有什么av_read_frame之类的函数
     while(fread(frame_buf, 1, y_size * 3 / 2, vfile)>0){
         frame->data[0] = frame_buf;  // 亮度Y
         frame->data[1] = frame_buf+ y_size;  // U 
@@ -116,7 +117,7 @@ inityuv();
         }
         if (got_frame==1){
             printf("Succeed to encode 1 frame! 编码成功1帧！\n");
-            pkt.stream_index = mp4Stream->index;
+            pkt.stream_index = vstream->index;
             ret = av_write_frame(fmt_ctx, &pkt);
             // av_free_packet(&pkt);
 			av_packet_unref(&pkt);
