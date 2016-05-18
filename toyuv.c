@@ -18,25 +18,25 @@ int got_frame;
 
 FILE * vfile;
 void inityuv(){
-	vfile = fopen("v.yuv", "w");
-	if(vfile == NULL){
-		fprintf(stderr, "fopen fail\n");
-		exit(1);
-	}
+    vfile = fopen("v.yuv", "w");
+    if(vfile == NULL){
+        fprintf(stderr, "fopen fail\n");
+        exit(1);
+    }
 }
 
 int main (int argc, char **argv)
 {
-	int vstream_idx;
+    int vstream_idx;
     AVStream *vstream;
     AVCodecContext *dec_ctx = NULL;
     AVCodec *dec = NULL;
     AVDictionary *opts = NULL;
-	int ret;
-	if(argc != 2){
+    int ret;
+    if(argc != 2){
         fprintf(stderr, "usage as:%s filename\n", argv[0]);
-		exit(1);
-	}
+        exit(1);
+    }
 inityuv();
 
     /* register all formats and codecs */
@@ -50,20 +50,20 @@ inityuv();
 
 
     /* retrieve stream information */
-	//如果输入的H264文件，这里节能拿到h264文件的宽高等信息了
+    //如果输入的H264文件，这里节能拿到h264文件的宽高等信息了
     if (avformat_find_stream_info(fmt_ctx, NULL) < 0) {
         fprintf(stderr, "Could not find stream information\n");
         exit(1);
     }
-	
+    
     vstream_idx = av_find_best_stream(fmt_ctx, AVMEDIA_TYPE_VIDEO, -1, -1, NULL, 0);
-	if(vstream_idx == AVERROR_DECODER_NOT_FOUND){
-		fprintf(stderr, "av_find_best_stream AVMEDIA_TYPE_VIDEO fail\n");
-		exit(1);
-	}
+    if(vstream_idx == AVERROR_DECODER_NOT_FOUND){
+        fprintf(stderr, "av_find_best_stream AVMEDIA_TYPE_VIDEO fail\n");
+        exit(1);
+    }
 
     vstream = fmt_ctx->streams[vstream_idx];
-	dec_ctx = vstream->codec;
+    dec_ctx = vstream->codec;
 printf("width:%d height:%d\n", dec_ctx->width, dec_ctx->height);
 
     dec = avcodec_find_decoder(dec_ctx->codec_id);
@@ -94,7 +94,7 @@ printf("width:%d height:%d\n", dec_ctx->width, dec_ctx->height);
     if (!frame) {
         ret = AVERROR(ENOMEM);
         fprintf(stderr, "Could not allocate frame:%d\n", ret);
-		exit(1);
+        exit(1);
     }
     /* initialize packet, set data to NULL, let the demuxer fill it */
     av_init_packet(&pkt);
@@ -111,14 +111,14 @@ printf("width:%d height:%d\n", dec_ctx->width, dec_ctx->height);
             }
             pkt.data += ret;
             pkt.size -= ret;
-			if(got_frame){
+            if(got_frame){
                 /* copy decoded frame to destination buffer:
                  * this is required since rawvideo expects non aligned data */
                 av_image_copy(video_dst_data, video_dst_linesize,
                               (const uint8_t **)(frame->data), frame->linesize,
                               dec_ctx->pix_fmt, dec_ctx->width, dec_ctx->height);
                 fwrite(video_dst_data[0], 1, video_dst_bufsize, vfile);
-			}
+            }
         } while (pkt.size > 0);
     }
 
@@ -128,5 +128,5 @@ printf("width:%d height:%d\n", dec_ctx->width, dec_ctx->height);
         fclose(vfile);
     av_frame_free(&frame);
     av_free(video_dst_data[0]);
-	av_packet_unref(&pkt);
+    av_packet_unref(&pkt);
 }
