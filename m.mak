@@ -1,3 +1,5 @@
+ov:
+	gcc -g -I./include -L./lib  -g -Wall overlay.c -pthread ./lib/libavdevice.a ./lib/libavfilter.a ./lib/libpostproc.a ./lib/libavformat.a ./lib/libavcodec.a ./lib/libswresample.a ./lib/libswscale.a -lx264 ./lib/libavresample.a ./lib/libavutil.a ./lib/libfdk-aac.a -lz -llzma -lm -ldl  -o ov
 topcm:
 	gcc -g -I./include -L./lib  -g -Wall topcm.c  -pthread ./lib/libavdevice.a ./lib/libavfilter.a ./lib/libpostproc.a ./lib/libavformat.a ./lib/libavcodec.a ./lib/libswresample.a ./lib/libswscale.a -lx264 ./lib/libavutil.a ./lib/libfdk-aac.a -lz -llzma -lm -ldl  -o topcm
 pcmto:
