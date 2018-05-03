@@ -106,7 +106,7 @@ int main(int argc, char* argv[])
 
     for (i = 0; i < ifmt_ctx_a->nb_streams; i++) {
         //Create output AVStream according to input AVStream
-        if (ifmt_ctx_a->streams[i]->codec->codec_type == AVMEDIA_TYPE_AUDIO) {
+        if (ifmt_ctx_a->streams[i]->codecpar->codec_type == AVMEDIA_TYPE_AUDIO) {
             AVStream *in_stream = ifmt_ctx_a->streams[i];
 
             AVCodec * codec_a = avcodec_find_decoder(in_stream->codecpar->codec_id);
