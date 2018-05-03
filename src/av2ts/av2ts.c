@@ -126,6 +126,8 @@ int main(int argc, char* argv[])
             audioindex_a = i;
             audioindex_out = out_stream->index;
             out_stream->codecpar->codec_tag = 0;
+            //TODO 因为不会用到codec，所以这个flag有用吗？
+            //并且codec这个成员废弃了，所以怎么代替这个flags？
             if (ofmt_ctx->oformat->flags & AVFMT_GLOBALHEADER)
                 out_stream->codec->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;
 
