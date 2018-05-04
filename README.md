@@ -14,3 +14,5 @@ sudo apt-get install libx264-dev
 sudo apt-get install libavdev
 sudo apt-get install libpostproc-dev
 但是最新的ffmpeg并且和libfdk_aac一起的只能自己编译
+
+cmake -G Xcode ../learnffmpeg/ -DFFINCDIR=/Users/liuye/source/ffmpeg -DFFLIBDIR=/Users/liuye/source/ffmpeg/lib -DOPENSSL_ROOT_DIR=/usr/local/Cellar/openssl/1.0.2n
