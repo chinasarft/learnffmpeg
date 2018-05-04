@@ -37,7 +37,7 @@ int main(int argc, char* argv[])
     const char *in_filename_v = "128x128.264";
     const char *in_filename_a = "aa.aac";
 
-    const char *out_filename = "cuc_ieschool.ts";//Output file URL
+    const char *out_filename = "cuc_ieschool.mp4";//Output file URL
     //av_register_all(); //4.0 后不需要调用这个函数了
     //Input
     if ((ret = avformat_open_input(&ifmt_ctx_v, in_filename_v, 0, 0)) < 0) {
@@ -91,15 +91,16 @@ int main(int argc, char* argv[])
             }
             avcodec_parameters_from_context(out_stream->codecpar, codec_ctx_v);
 
-            //这里我们不用解码，所以直接释放了
-            avcodec_free_context(&codec_ctx_v);
 
             videoindex_v = i;
             videoindex_out = out_stream->index;
 
             out_stream->codecpar->codec_tag = 0;
             if (ofmt_ctx->oformat->flags & AVFMT_GLOBALHEADER)
-                out_stream->codec->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;
+                codec_ctx_v->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;
+            
+            //we not need to codec now. so free it
+            avcodec_free_context(&codec_ctx_v);
             break;
         }
     }
@@ -121,7 +122,6 @@ int main(int argc, char* argv[])
             }
             avcodec_parameters_from_context(out_stream->codecpar, codec_ctx_a);
 
-            avcodec_free_context(&codec_ctx_a);
 
             audioindex_a = i;
             audioindex_out = out_stream->index;
@@ -129,8 +129,9 @@ int main(int argc, char* argv[])
             //TODO 因为不会用到codec，所以这个flag有用吗？
             //并且codec这个成员废弃了，所以怎么代替这个flags？
             if (ofmt_ctx->oformat->flags & AVFMT_GLOBALHEADER)
-                out_stream->codec->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;
+                codec_ctx_a->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;
 
+            avcodec_free_context(&codec_ctx_a);
             break;
         }
     }

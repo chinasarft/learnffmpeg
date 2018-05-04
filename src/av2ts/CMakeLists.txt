@@ -19,5 +19,9 @@ add_executable(av2ts
 
 if(WIN32)
         target_link_libraries(av2ts avformat avcodec avfilter swresample swscale avutil)
+elseif(APPLE)
+	set(CMAKE_EXE_LINKER_FLAGS
+    		"-framework AudioToolbox -framework VideoToolbox -framework CoreGraphics -framework QuartzCore -framework CoreFoundation -framework CoreMedia -framework Security")
+        target_link_libraries(av2ts avformat avcodec avfilter swresample swscale avutil bz2 lzma iconv z)
 endif()
 
