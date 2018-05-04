@@ -60,8 +60,11 @@ int sdp_open(AVFormatContext **pctx, const char *data, AVDictionary **options)
     opaque->len = strlen(data);
     opaque->cur = 0;
     memcpy(opaque->data, data, opaque->len);
+    
+    int sdpLen = sdp_read(opaque, avioBuffer, avioBufferSize);
+    AVIOContext * pbctx = avio_alloc_context(avioBuffer, sdpLen, 0, opaque, NULL, NULL, NULL);
 
-    AVIOContext * pbctx = avio_alloc_context(avioBuffer, avioBufferSize, 0, opaque, sdp_read, NULL, NULL);
+    //AVIOContext * pbctx = avio_alloc_context(avioBuffer, avioBufferSize, 0, opaque, sdp_read, NULL, NULL);
     assert(pbctx);
 
     (*pctx)->pb = pbctx;
