@@ -18,6 +18,18 @@ FIX:AAC in some container format (FLV, MP4, MKV etc.) need
 //'1': Use AAC Bitstream Filter
 #define USE_AACBSF 0
 
+void init_aacbsfc(AVBSFContext **aacbsfc, AVCodecParameters * codecpar){
+    const AVBitStreamFilter * filter = av_bsf_get_by_name("aac_adtstoasc");
+    av_bsf_alloc(filter, aacbsfc);
+    avcodec_parameters_copy((*aacbsfc)->par_in, codecpar);
+    av_bsf_init(*aacbsfc);
+}
+void init_mp4toannexb(AVBSFContext **mp4toannexb, AVCodecParameters * codecpar){
+    const AVBitStreamFilter * filter = av_bsf_get_by_name("h264_mp4toannexb");
+    av_bsf_alloc(filter, mp4toannexb);
+    avcodec_parameters_copy((*mp4toannexb)->par_in, codecpar);
+    av_bsf_init(*mp4toannexb);
+}
 
 
 int main(int argc, char* argv[])
@@ -156,12 +168,13 @@ int main(int argc, char* argv[])
     }
 
 
-    //FIX
 #if USE_H264BSF
-    AVBitStreamFilterContext* h264bsfc = av_bitstream_filter_init("h264_mp4toannexb");
+    AVBSFContext * h264bsf;
+    init_mp4toannexb(&h264bsf,  ifmt_ctx_v->streams[videoindex_v]->codecpar);
 #endif
 #if USE_AACBSF
-    AVBitStreamFilterContext* aacbsfc = av_bitstream_filter_init("aac_adtstoasc");
+    AVBSFContext * aacbsfc;
+    init_aacbsfc(&aacbsfc,  ifmt_ctx_a->streams[audioindex_a]->codecpar);
 #endif
 
     while (1) {
@@ -242,10 +255,12 @@ int main(int argc, char* argv[])
 
         //FIX:Bitstream Filter
 #if USE_H264BSF
-        av_bitstream_filter_filter(h264bsfc, in_stream->codec, NULL, &pkt.data, &pkt.size, pkt.data, pkt.size, 0);
+        av_bsf_send_packet(h264bsfc, &pkt);
+        while (av_bsf_receive_packet(h264bsfc, &pkt) == 0);
 #endif
 #if USE_AACBSF
-        av_bitstream_filter_filter(aacbsfc, out_stream->codec, NULL, &pkt.data, &pkt.size, pkt.data, pkt.size, 0);
+        av_bsf_send_packet(aacbsfc, &pkt);
+        while (av_bsf_receive_packet(aacbsfc, &pkt) == 0);
 #endif
 
 
@@ -271,10 +286,10 @@ int main(int argc, char* argv[])
     av_write_trailer(ofmt_ctx);
 
 #if USE_H264BSF
-    av_bitstream_filter_close(h264bsfc);
+    av_bsf_free(h264bsfc);
 #endif
 #if USE_AACBSF
-    av_bitstream_filter_close(aacbsfc);
+    av_bsf_free(aacbsfc);
 #endif
 
 end:
