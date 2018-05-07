@@ -14,4 +14,5 @@ endif()
 
 add_subdirectory(src/av2ts)
 add_subdirectory(src/av2rtpts)
+add_subdirectory(src/av2rtpartpv)
 add_subdirectory(src/opensdp)
