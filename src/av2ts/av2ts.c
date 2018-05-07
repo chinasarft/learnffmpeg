@@ -89,30 +89,20 @@ int main(int argc, char* argv[])
     for (i = 0; i < ifmt_ctx_v->nb_streams; i++) {
         //Create output AVStream according to input AVStream
         if (ifmt_ctx_v->streams[i]->codecpar->codec_type == AVMEDIA_TYPE_VIDEO) {
-            AVStream *in_stream = ifmt_ctx_v->streams[i];
 
-            AVCodec * codec_v = avcodec_find_decoder(in_stream->codecpar->codec_id);
-            codec_ctx_v = avcodec_alloc_context3(codec_v);
-            avcodec_parameters_to_context(codec_ctx_v, in_stream->codecpar);
-
-            AVStream *out_stream = avformat_new_stream(ofmt_ctx, codec_v);
+            AVStream *out_stream = avformat_new_stream(ofmt_ctx, NULL);
             if (!out_stream) {
                 printf("Failed allocating output stream\n");
                 ret = AVERROR_UNKNOWN;
                 goto end;
             }
-            avcodec_parameters_from_context(out_stream->codecpar, codec_ctx_v);
-
 
             videoindex_v = i;
             videoindex_out = out_stream->index;
-
             out_stream->codecpar->codec_tag = 0;
-            if (ofmt_ctx->oformat->flags & AVFMT_GLOBALHEADER)
-                codec_ctx_v->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;
             
-            //we not need to codec now. so free it
-            avcodec_free_context(&codec_ctx_v);
+            avcodec_parameters_copy(out_stream->codecpar, ifmt_ctx_v->streams[i]->codecpar);
+            
             break;
         }
     }
@@ -120,30 +110,20 @@ int main(int argc, char* argv[])
     for (i = 0; i < ifmt_ctx_a->nb_streams; i++) {
         //Create output AVStream according to input AVStream
         if (ifmt_ctx_a->streams[i]->codecpar->codec_type == AVMEDIA_TYPE_AUDIO) {
-            AVStream *in_stream = ifmt_ctx_a->streams[i];
 
-            AVCodec * codec_a = avcodec_find_decoder(in_stream->codecpar->codec_id);
-            codec_ctx_a = avcodec_alloc_context3(codec_a);
-            avcodec_parameters_to_context(codec_ctx_a, in_stream->codecpar);
-
-            AVStream *out_stream = avformat_new_stream(ofmt_ctx, codec_a);
+            AVStream *out_stream = avformat_new_stream(ofmt_ctx, NULL);
             if (!out_stream) {
                 printf("Failed allocating output stream\n");
                 ret = AVERROR_UNKNOWN;
                 goto end;
             }
-            avcodec_parameters_from_context(out_stream->codecpar, codec_ctx_a);
-
 
             audioindex_a = i;
             audioindex_out = out_stream->index;
             out_stream->codecpar->codec_tag = 0;
-            //TODO 因为不会用到codec，所以这个flag有用吗？
-            //并且codec这个成员废弃了，所以怎么代替这个flags？
-            if (ofmt_ctx->oformat->flags & AVFMT_GLOBALHEADER)
-                codec_ctx_a->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;
+            
+            avcodec_parameters_copy(out_stream->codecpar, ifmt_ctx_a->streams[i]->codecpar);
 
-            avcodec_free_context(&codec_ctx_a);
             break;
         }
     }
