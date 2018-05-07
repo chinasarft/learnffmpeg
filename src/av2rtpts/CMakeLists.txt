@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.9.0)
 
-project(av2ts2rtp)
+project(av2rtpts)
 
 
 if(NOT FFINCDIR)
@@ -14,14 +14,14 @@ endif()
 include_directories(${FFINCDIR})
 link_directories(${FFLIBDIR})
 
-add_executable(av2ts2rtp
-        av2ts2rtp.c)
+add_executable(av2rtpts
+        av2rtpts.c)
 
 if(WIN32)
-        target_link_libraries(av2ts2rtp avformat avcodec avfilter swresample swscale avutil)
+        target_link_libraries(av2rtpts avformat avcodec avfilter swresample swscale avutil)
 elseif(APPLE)
 	set(CMAKE_EXE_LINKER_FLAGS
     		"-framework AudioToolbox -framework VideoToolbox -framework CoreGraphics -framework QuartzCore -framework CoreFoundation -framework CoreMedia -framework Security")
-        target_link_libraries(av2ts2rtp avformat avcodec avfilter swresample swscale avutil bz2 lzma iconv z)
+        target_link_libraries(av2rtpts avformat avcodec avfilter swresample swscale avutil bz2 lzma iconv z)
 endif()
 
