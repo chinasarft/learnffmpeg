@@ -22,10 +22,10 @@ public:
     void Dts(IN uint64_t);
 
     // stream and codec
-    StreamType GetStreamType() const;
-    void SetStreamType(IN StreamType);
-    CodecType GetCodec() const;
-    void SetCodec(IN CodecType);
+    enum AVMediaType GetStreamType() const;
+    void SetStreamType(IN enum AVMediaType);
+    enum AVCodecID GetCodec() const;
+    void SetCodec(IN enum AVCodecID);
 
     // data fields
     char* Data()const;
@@ -54,8 +54,8 @@ private:
     AVCodecParameters* pAvCodecPar_ = nullptr;
 
     // save following fields seperately
-    StreamType stream_;
-    CodecType codec_;
+    enum AVMediaType stream_;
+    enum AVCodecID codec_;
 
     // video specific
     int nWidth_ = -1, nHeight_ = -1;
@@ -71,10 +71,10 @@ public:
     ~MediaFrame();
     inline AVFrame* AvFrame() const { return pAvFrame_; }
 
-    StreamType GetStreamType() const;
-    void SetStreamType(IN StreamType);
-    CodecType GetCodec() const;
-    void SetCodec(IN CodecType);
+    enum AVMediaType GetStreamType() const;
+    void SetStreamType(IN enum AVMediaType);
+    enum AVCodecID GetCodec() const;
+    void SetCodec(IN enum AVCodecID);
 
     void ExtraBuffer(unsigned char* pBuf); // TODO: delete, will use AudioResampler instead
 
@@ -86,8 +86,8 @@ public:
 private:
 
 
-    StreamType stream_;
-    CodecType codec_;
+    enum AVMediaType stream_;
+    enum AVCodecID codec_;
 
     unsigned char* pExtraBuf_ = nullptr;
 };

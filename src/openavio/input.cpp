@@ -155,6 +155,7 @@ int AvReceiver::initContext()
             hasVideo_ = true;
         }
     }
+                assert(!(hasAudio_ && hasVideo_));
     mediaDuration_ = pAvContext_->duration / 1000000;
     
 #if LOG_TRADITIONAL
@@ -350,6 +351,7 @@ Input::Input(IN InputParam _param) :
     videoComposationTime(-1),
     startSysTime(-1),
     audioFrameCount_(0),
+    audioResampleFrameCount_(0),
     videoFrameCount_(0)
 {
     bReceiverExit_.store(false);
@@ -383,10 +385,10 @@ void Input::Start()
                 };
 
                 // start decoder loop
-                if (_pPacket->GetStreamType() == STREAM_VIDEO) {
+                if (_pPacket->GetStreamType() == AVMEDIA_TYPE_VIDEO) {
                     vDecoder_->Decode(_pPacket, decoderHook);
                 }
-                else if (_pPacket->GetStreamType() == STREAM_AUDIO) {
+                else if (_pPacket->GetStreamType() == AVMEDIA_TYPE_AUDIO) {
                     aDecoder_->Decode(_pPacket, decoderHook);
                 }
 
@@ -397,9 +399,10 @@ void Input::Start()
             // 推出条件是receiverHook返回非0
             avReceiver_->Receive(receiverHook);
 
-            reset();
             if (bRestart_.load()) {
                 // prevent receiver reconnecting too fast
+                loginfo("restart input");
+                reset();
                 os_sleep_ms(2000);
             } else {
                 bReceiverExit_.store(true);
@@ -421,6 +424,7 @@ void Input::reset() {
     videoComposationTime = -1;
     startSysTime = -1;
     audioFrameCount_ = 0;
+    audioResampleFrameCount_ = 0;
     videoFrameCount_ = 0;
 }
 
@@ -533,15 +537,12 @@ void Input::setPts(const std::shared_ptr<MediaFrame>& _pFrame, int64_t nFrameCou
 
 void Input::outputFrame(const std::shared_ptr<MediaFrame>& _pFrame)
 {
+    int64_t originPts = _pFrame->pts;
     // format video/audio data
-    if (_pFrame->GetStreamType() == STREAM_AUDIO) {
-#if LOG_TRADITIONAL
-        logdebug("origin audiopts:%lld", _pFrame->pts);
-#else
-        logdebug("origin audiopts:{}", _pFrame->pts);
-#endif
+    if (_pFrame->GetStreamType() == AVMEDIA_TYPE_AUDIO) {
         audioFrameCount_++;
         setPts(_pFrame, audioFrameCount_, prevAudioPts, avReceiver_->GetAudioCtxFps());
+        int64_t adjustPts = _pFrame->pts;
 #ifdef INPUT_RESAMPLE
         if (startAudioPts == -1) {
             startAudioPts = _pFrame->pts;
@@ -550,15 +551,20 @@ void Input::outputFrame(const std::shared_ptr<MediaFrame>& _pFrame)
 #else
         audioFrameQueue_.push(_pFrame);
 #endif
-    }
-    else if (_pFrame->GetStreamType() == STREAM_VIDEO) {
 #if LOG_TRADITIONAL
-        logdebug("origin videopts:%lld", _pFrame->pts);
+            logdebug("origin audiopts:%lld  adjustpts:%lld resamplePts:%lld", originPts, adjustPts, _pFrame->pts);
 #else
-        logdebug("origin videopts:{}", _pFrame->pts);
+            logdebug("origin audiopts:{} adjustpts:{} resamplePts:{}", originPts, adjustPts, _pFrame->pts);
 #endif
+    }
+    else if (_pFrame->GetStreamType() == AVMEDIA_TYPE_VIDEO) {
         videoFrameCount_++;
         setPts(_pFrame, videoFrameCount_, prevVideoPts, avReceiver_->GetVideoCtxFps());
+#if LOG_TRADITIONAL
+            logdebug("origin videopts:%lld adjustpts:%lld", originPts,  _pFrame->pts);
+#else
+            logdebug("origin videopts:{} adjustpts:{}", originPts, _pFrame->pts);
+#endif
         videoFrameQueue_.push(_pFrame);
     }
        
@@ -747,7 +753,7 @@ void Input::resampleAndSetAudio(const std::shared_ptr<MediaFrame>& _pFrame)
                 // move rest samples to beginning of the buffer
                 std::copy(sampleBuffer_.begin() + nSizeEachFrame, sampleBuffer_.end(), sampleBuffer_.begin());
                 sampleBuffer_.resize(sampleBuffer_.size() - nSizeEachFrame);
-                if (startVideoPts == -1)
+                if (startAudioPts == -1)
                     pNewFrame->pts = int64_t(audioResampleFrameCount_ * resampler_->DurationPerFrame());
                 else
                     pNewFrame->pts = int64_t(audioResampleFrameCount_ * resampler_->DurationPerFrame()) + startAudioPts;

@@ -5,12 +5,12 @@ MediaPacket::MediaPacket(IN const AVStream& _avStream, IN const AVPacket* _pAvPa
 {
     // save codec pointer
     pAvCodecPar_ = _avStream.codecpar;
-    StreamType stream = static_cast<StreamType>(pAvCodecPar_->codec_type);
-    if (stream != STREAM_AUDIO && stream != STREAM_VIDEO) {
-        stream = STREAM_DATA;
+    enum AVMediaType stream = pAvCodecPar_->codec_type;
+    if (stream != AVMEDIA_TYPE_AUDIO && stream != AVMEDIA_TYPE_VIDEO) {
+        stream = AVMEDIA_TYPE_DATA;
     }
     SetStreamType(stream);
-    SetCodec(static_cast<CodecType>(pAvCodecPar_->codec_id));
+    SetCodec(pAvCodecPar_->codec_id);
     Width(pAvCodecPar_->width);
     Height(pAvCodecPar_->height);
     SampleRate(pAvCodecPar_->sample_rate);
@@ -61,22 +61,22 @@ void MediaPacket::Dts(uint64_t _dts)
     pAvPacket_->dts = _dts;
 }
 
-StreamType MediaPacket::GetStreamType() const
+enum AVMediaType MediaPacket::GetStreamType() const
 {
     return stream_;
 }
 
-void MediaPacket::SetStreamType(StreamType _type)
+void MediaPacket::SetStreamType(enum AVMediaType _type)
 {
     stream_ = _type;
 }
 
-CodecType MediaPacket::GetCodec() const
+enum AVCodecID MediaPacket::GetCodec() const
 {
     return codec_;
 }
 
-void MediaPacket::SetCodec(CodecType _type)
+void MediaPacket::SetCodec(enum AVCodecID _type)
 {
     codec_ = _type;
 }
@@ -197,13 +197,13 @@ MediaFrame::MediaFrame(const MediaFrame& _frame)
     }
 
     switch (_frame.GetStreamType()) {
-    case STREAM_VIDEO:
+    case AVMEDIA_TYPE_VIDEO:
         pAvFrame_->format = _frame.AvFrame()->format;
         pAvFrame_->width = _frame.AvFrame()->width;
         pAvFrame_->height = _frame.AvFrame()->height;
         av_frame_get_buffer(pAvFrame_, 32);
         break;
-    case STREAM_AUDIO:
+    case AVMEDIA_TYPE_AUDIO:
         pAvFrame_->nb_samples = _frame.AvFrame()->nb_samples;
         pAvFrame_->format = _frame.AvFrame()->format;
         pAvFrame_->channels = _frame.AvFrame()->channels;
@@ -224,22 +224,22 @@ MediaFrame::MediaFrame(const MediaFrame& _frame)
     pts = _frame.pts;
 }
 
-StreamType MediaFrame::GetStreamType() const
+enum AVMediaType MediaFrame::GetStreamType() const
 {
     return stream_;
 }
 
-void MediaFrame::SetStreamType(StreamType _type)
+void MediaFrame::SetStreamType(enum AVMediaType _type)
 {
     stream_ = _type;
 }
 
-CodecType MediaFrame::GetCodec() const
+enum AVCodecID MediaFrame::GetCodec() const
 {
     return codec_;
 }
 
-void MediaFrame::SetCodec(CodecType _type)
+void MediaFrame::SetCodec(enum AVCodecID _type)
 {
     codec_ = _type;
 }

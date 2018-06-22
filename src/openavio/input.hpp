@@ -40,12 +40,12 @@ private:
     AVIOContext *pAvioCtx_ = nullptr;
     uint8_t *pAvioCtxBuffer = nullptr;
 
-    InputParam *param_;
-    bool hasAudio_;
-    bool hasVideo_;
-    int  videoAvgFps_;
-    int  audioAvgFps_;
-    int  mediaDuration_;
+    InputParam *param_ = nullptr;
+    bool hasAudio_ = false;
+    bool hasVideo_ = false;
+    int  videoAvgFps_ = -1;
+    int  audioAvgFps_ = -1;
+    int  mediaDuration_ = -1;
 
     std::chrono::high_resolution_clock::time_point start_;
     long nTimeout_ = 10000; // 10 seconds timeout by default

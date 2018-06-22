@@ -52,30 +52,6 @@ typedef int ssize_t;
 
 #include "logger.h"
 
-typedef enum
-{
-    STREAM_VIDEO = AVMEDIA_TYPE_VIDEO,
-    STREAM_AUDIO = AVMEDIA_TYPE_AUDIO,
-    STREAM_DATA = AVMEDIA_TYPE_DATA
-} StreamType;
-
-typedef enum
-{
-    // video
-    CODEC_H264 = AV_CODEC_ID_H264,
-    CODEC_VC1 = AV_CODEC_ID_VC1,
-
-    // Audio
-    CODEC_MP3 = AV_CODEC_ID_MP3,
-    CODEC_AAC = AV_CODEC_ID_AAC,
-    CODEC_WAV1 = AV_CODEC_ID_WMAV1,
-    CODEC_WAV2 = AV_CODEC_ID_WMAV2,
-
-    // others
-    CODEC_FLV_METADATA = AV_CODEC_ID_FFMETADATA,
-    CODEC_UNKNOWN = AV_CODEC_ID_NONE
-} CodecType;
-
 #define STAUS_CHECK(status, retv, msg, ...) if (status < 0) {\
     release();\
     logerror(msg,  __VA_ARGS__);\
