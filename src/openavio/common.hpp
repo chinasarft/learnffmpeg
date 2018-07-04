@@ -17,6 +17,7 @@
 #include <random>
 #include <shared_mutex>
 #include <queue>
+#include "ThreadCleaner.h"
 
 extern "C"
 {
@@ -67,6 +68,7 @@ typedef int ssize_t;
 //#define ACCURACY_NS
 
 #define os_gettime_ns() std::chrono::high_resolution_clock::now().time_since_epoch().count()
+#define os_gettime_ms() std::chrono::high_resolution_clock::now().time_since_epoch().count()/1000000
 #define os_sleep_ns(ns) std::this_thread::sleep_for(std::chrono::nanoseconds(ns));
 #define os_sleep_ms(ms) std::this_thread::sleep_for(std::chrono::milliseconds(ms));
 

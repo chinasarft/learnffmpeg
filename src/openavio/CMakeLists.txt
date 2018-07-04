@@ -28,6 +28,8 @@ add_library(avinput SHARED
         media.cpp
 	logger.h
 	logger.cpp
+        ThreadCleaner.h
+        ThreadCleaner.cpp
 	)
 
 if(WIN32)

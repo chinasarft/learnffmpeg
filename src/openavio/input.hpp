@@ -18,7 +18,7 @@ typedef struct InputParam {
     void * userData_;
     GetFrameCallback getFrameCb_ = nullptr;
     FeedDataCallback feedDataCb_ = nullptr;
-    void * feedCbOpaqueArg_;
+    void * feedCbOpaqueArg_ = nullptr;
     std::vector<std::string> audioOpts;
     std::vector<std::string> videoOpts;
 }InputParam;
