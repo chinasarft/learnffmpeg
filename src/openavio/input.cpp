@@ -44,6 +44,9 @@ int AvReceiver::AvInterruptCallback(void* _pContext)
             now.time_since_epoch().count(), pReceiver->start_.time_since_epoch().count(), diff);
         return -1;
     }
+    if(pReceiver->param_->__innerQuitFlag->load() == true) {
+        return -1;
+    }
 
     return 0;
 }
@@ -155,7 +158,7 @@ int AvReceiver::initContext()
             hasVideo_ = true;
         }
     }
-                assert(!(hasAudio_ && hasVideo_));
+
     mediaDuration_ = pAvContext_->duration / 1000000;
     
 #if LOG_TRADITIONAL
@@ -178,7 +181,8 @@ int AvReceiver::Receive(IN PacketHandlerType& _callback)
     while (true) {
         AVPacket* pAvPacket = av_packet_alloc();
         av_init_packet(pAvPacket);
-        if (av_read_frame(pAvContext_, pAvPacket) == 0) {
+        int ret = 0;
+        if ((ret = av_read_frame(pAvContext_, pAvPacket)) == 0) {
             if (pAvPacket->stream_index < 0 ||
                 static_cast<unsigned int>(pAvPacket->stream_index) >= pAvContext_->nb_streams) {
                 logwarn("invalid stream index in packet");
@@ -199,6 +203,11 @@ int AvReceiver::Receive(IN PacketHandlerType& _callback)
             start_ = std::chrono::high_resolution_clock::now();
         }
         else {
+#if LOG_TRADITIONAL
+            logerror("av_frame_frame error:%d", ret);
+#else
+            logerror("av_frame_frame error:{}", ret);
+#endif
             break;
         }
     }
@@ -356,6 +365,7 @@ Input::Input(IN InputParam _param) :
 {
     bReceiverExit_.store(false);
     bRestart_.store(true);
+    param_.__innerQuitFlag = &bReceiverExit_;
 }
 
 // start thread => receiver loop => decoder loop
@@ -695,6 +705,7 @@ void Input::outputFrame(const std::shared_ptr<MediaFrame>& _pFrame)
 
 Input::~Input()
 {
+        fprintf(stderr, "~Input");
     Stop();
 }
 

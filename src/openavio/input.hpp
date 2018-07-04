@@ -21,6 +21,7 @@ typedef struct InputParam {
     void * feedCbOpaqueArg_ = nullptr;
     std::vector<std::string> audioOpts;
     std::vector<std::string> videoOpts;
+    std::atomic<bool> *__innerQuitFlag;
 }InputParam;
 
 class AvReceiver
@@ -74,7 +75,7 @@ private:
 
 // Input
 using namespace std::chrono;
-class Input
+class Input : public StopClass
 {
 public:
     Input(IN InputParam _param);

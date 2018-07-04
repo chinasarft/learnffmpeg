@@ -5,8 +5,10 @@
 ThreadCleaner::ThreadCleaner()
 {
     auto clean = [this](){
-        while(shouldQuit_ == false) {
-            bool hasItem = false;
+        bool hasItem = false;
+        while(!(shouldQuit_ == true && hasItem == false)) {
+                fprintf(stderr, "thread clear in working\n");
+            hasItem = false;
             if (threads_.size() > 0) {
                 hasItem = true;
                 std::thread t;
@@ -20,8 +22,9 @@ ThreadCleaner::ThreadCleaner()
             if (objsToStop_.size() > 0) {
                 hasItem = true;
                 std::shared_ptr<StopClass> c = objsToStop_.front();
-                threads_.pop_front();
-                c->Stop();
+                objsToStop_.pop_front();
+                if (c.get())
+                    c->Stop();
             }
 
             if (hasItem == false) {
