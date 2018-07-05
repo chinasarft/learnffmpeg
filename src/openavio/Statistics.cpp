@@ -52,6 +52,7 @@ Statistics::Statistics(int interval) :
 
 Statistics::~Statistics()
 {
+
     fprintf(stderr, "~Statistics\n");
 }
 

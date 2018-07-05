@@ -450,6 +450,9 @@ void Input::reset() {
 
 void Input::Stop()
 {
+    if (stat_.get() != nullptr){
+        stat_->Stop();
+    }
     bReceiverExit_.store(true);
     reset();
     if (receiver_.joinable()) {
