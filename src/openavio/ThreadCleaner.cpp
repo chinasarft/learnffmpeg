@@ -29,7 +29,8 @@ ThreadCleaner::ThreadCleaner()
 
             if (hasItem == false) {
                 std::unique_lock<std::mutex> lock(mutex_);
-                condition_.wait(lock);
+                condition_.wait_for(lock, std::chrono::milliseconds(500));
+                //condition_.wait(lock);
             }
         }
     };

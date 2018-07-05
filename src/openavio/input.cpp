@@ -376,9 +376,18 @@ void Input::Start()
             avReceiver_ = std::make_unique<AvReceiver>(&param_);
             vDecoder_ = std::make_unique<AvDecoder>();
             aDecoder_ = std::make_unique<AvDecoder>();
+            stat_ = std::make_shared<Statistics>(10);
 
             auto receiverHook = [&](IN const std::unique_ptr<MediaPacket> _pPacket) -> int {
-                //stat.OneSample(_pPacket->Size());
+                auto type = _pPacket->GetStreamType();
+                if (!stat_->IsStarted()) {
+                    stat_->Start();
+                }
+                if (type == AVMEDIA_TYPE_AUDIO) {
+                    stat_->StatAudio(_pPacket->AvPacket()->size);
+                } else if (type == AVMEDIA_TYPE_VIDEO) {
+                    stat_->StatVideo(_pPacket->AvPacket()->size, false);
+                }
 
                 if (bReceiverExit_.load() == true) {
                     return -1;
@@ -406,9 +415,10 @@ void Input::Start()
             };
 
             // start receiver loop
-            // 推出条件是receiverHook返回非0
+            // 退出条件是receiverHook返回非0
             avReceiver_->Receive(receiverHook);
 
+            ThreadCleaner::GetThreadCleaner()->Push(std::move(stat_));
             if (bRestart_.load()) {
                 // prevent receiver reconnecting too fast
                 loginfo("restart input");

@@ -2,6 +2,7 @@
 #define __INPUT_HPP__
 
 #include "common.hpp"
+#include "Statistics.h"
 
 class MediaPacket;
 class MediaFrame;
@@ -85,6 +86,8 @@ public:
     void Start();
     void Stop();
     void WaitStop();
+    const MediaStatInfo & GetMediaStatInfo(){return stat_->GetStatInfo();}
+    const char * GetMediaStatInfoStr(){return stat_->toString();}
 
 private:
     // push one video/audio
@@ -126,6 +129,7 @@ private:
     std::queue<std::shared_ptr<MediaFrame>> videoFrameQueue_;
     std::vector<uint8_t> sampleBuffer_;
     std::shared_ptr<AudioResampler> resampler_;
+    std::shared_ptr<Statistics> stat_;
 };
 
 #endif
