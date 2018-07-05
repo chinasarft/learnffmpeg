@@ -89,6 +89,21 @@ void Statistics::Start()
     isStarted_ = true;
 }
 
+void Statistics::Reset()
+{
+        std::lock_guard<std::mutex> lock(mutex_);
+        MediaStatInfo newInfo;
+        statInfo_ = newInfo;
+        curVideoStatByte_ = 0;
+        videoFrameCount_ = 0;
+        curAudioStatByte_ = 0;
+        audioFrameCount_ = 0;
+
+        for (int i = 0; i < interval_; i++) {
+                perSecond_[i] = 0;
+        }
+}
+
 void Statistics::Stop()
 {
     quit_ = true;

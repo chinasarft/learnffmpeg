@@ -29,8 +29,9 @@ public:
     void StatAudio(int size);
     const MediaStatInfo & GetStatInfo(){return statInfo_;}
     void Start();
-    bool IsStarted(){return isStarted_;};
+    bool IsStarted(){return isStarted_;}
     void Stop();
+    void Reset();
     const char * toString();
 private:
     bool quit_ = false;

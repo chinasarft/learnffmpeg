@@ -7,7 +7,6 @@ ThreadCleaner::ThreadCleaner()
     auto clean = [this](){
         bool hasItem = false;
         while(!(shouldQuit_ == true && hasItem == false)) {
-                fprintf(stderr, "thread clear in working\n");
             hasItem = false;
             if (threads_.size() > 0) {
                 hasItem = true;

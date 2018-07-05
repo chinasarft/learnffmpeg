@@ -366,6 +366,7 @@ Input::Input(IN InputParam _param) :
     bReceiverExit_.store(false);
     bRestart_.store(true);
     param_.__innerQuitFlag = &bReceiverExit_;
+    stat_ = std::make_shared<Statistics>(10);
 }
 
 // start thread => receiver loop => decoder loop
@@ -376,7 +377,6 @@ void Input::Start()
             avReceiver_ = std::make_unique<AvReceiver>(&param_);
             vDecoder_ = std::make_unique<AvDecoder>();
             aDecoder_ = std::make_unique<AvDecoder>();
-            stat_ = std::make_shared<Statistics>(10);
 
             auto receiverHook = [&](IN const std::unique_ptr<MediaPacket> _pPacket) -> int {
                 auto type = _pPacket->GetStreamType();
@@ -418,7 +418,7 @@ void Input::Start()
             // 退出条件是receiverHook返回非0
             avReceiver_->Receive(receiverHook);
 
-            ThreadCleaner::GetThreadCleaner()->Push(std::move(stat_));
+            stat_->Reset();
             if (bRestart_.load()) {
                 // prevent receiver reconnecting too fast
                 loginfo("restart input");
