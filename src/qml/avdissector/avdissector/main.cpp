@@ -1,8 +1,11 @@
 #include <QGuiApplication>
 #include <QQmlApplicationEngine>
+#include "mpegts.h"
 
 int main(int argc, char *argv[])
 {
+    mpegts ts;
+    qDebug()<<sizeof(TsAdaptationField);
     QCoreApplication::setAttribute(Qt::AA_EnableHighDpiScaling);
 
     QGuiApplication app(argc, argv);
