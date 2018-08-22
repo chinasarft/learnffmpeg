@@ -60,8 +60,7 @@ uint32_t crc32 (uint8_t *data, int len)
 static void initPes(PES *_pPes, uint8_t *_pData, int _nDataLen, int64_t _nPts)
 {
         memset(_pPes, 0, sizeof(PES));
-        _pPes->nPts = _nPts * 90; //90000hz
-        _pPes->nPts = _nPts;
+        _pPes->nPts = _nPts * 90; //90000hz, 这里传入的单位是毫秒
         _pPes->pESData = _pData;
         _pPes->nESDataLen = _nDataLen;
         _pPes->nWithPcr = 0;
@@ -168,12 +167,14 @@ int GetPESData(PES *_pPes, int _nCounter, int _nPid, uint8_t *_pData, int _nLen)
                                  //additional_copy_info_flag 1bit(0); PES_CRC_flag 1bit(0); PES_extension_flag 1bit(0)
                 pData[8] = 5;//PES_header_data_length 8bit. 剩下长度， 只有pts，pes中pts/dts长度为5
                 
+                int64_t nPts = _pPes->nPts;
+                memset(&pData[9], 0, 5);
                 //pts
-                pData[9]   = 0x21 | ((_pPes->nPts >> 29) & 0x0E);
-                pData[10] =  (_pPes->nPts >>22 & 0xFF);
-                pData[11] = 0x01 | ((_pPes->nPts >> 14 ) & 0xFE);
-                pData[12] =  (_pPes->nPts >> 7 & 0xFF);
-                pData[13] = 0x01 | ((_pPes->nPts << 1 ) & 0xFE);
+                pData[9]   = 0x21 | ((nPts >> 29) & 0x0E);
+                pData[10] =  (nPts >>22 & 0xFF);
+                pData[11] = 0x01 | ((nPts >> 14 ) & 0xFE);
+                pData[12] =  (nPts >> 7 & 0xFF);
+                pData[13] = 0x01 | ((nPts << 1 ) & 0xFE);
                 nRetLen += 14;
                 /*
                 int nReadLen = nRemainLen > _nLen ? _nLen : nRemainLen;
