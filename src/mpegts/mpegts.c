@@ -176,21 +176,6 @@ int GetPESData(PES *_pPes, int _nCounter, int _nPid, uint8_t *_pData, int _nLen)
                 pData[12] =  (nPts >> 7 & 0xFF);
                 pData[13] = 0x01 | ((nPts << 1 ) & 0xFE);
                 nRetLen += 14;
-                /*
-                int nReadLen = nRemainLen > _nLen ? _nLen : nRemainLen;
-                if (nReadLen + nRetLen > 188) {
-                        nReadLen = 188 - nRetLen;
-                }
-                memcpy(&_pData[nRetLen], _pPes->pESData + _pPes->nPos, nReadLen);
-                
-                _pPes->nPos += (nReadLen + nRetLen);
-                nRetLen += nReadLen;
-                if (nRetLen < 188) {
-                        memset(_pData + nRetLen, 0xff, 188 - nRetLen);
-                        SetAdaptationFieldFlag(_pData, ADAPTATION_BOTH);
-                }
-                return nRetLen;
-                 */
         }  else {
                 nRetLen = WriteTsHeader(pData, 0, _nCounter, _nPid, ADAPTATION_JUST_PAYLOAD);
         }
