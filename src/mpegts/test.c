@@ -590,7 +590,7 @@ int main(int argc, char* argv[])
 #endif
         avArg.output = writeTs;
         avArg.pOpaque = pTs;
-        avArg.nVideoFormat = TK_VIDEO_H264;
+        avArg.nVideoFormat = TK_VIDEO_H265;
         
         pTs = NewTsMuxerContext(&avArg);
 #ifdef __APPLE__

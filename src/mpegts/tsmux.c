@@ -59,11 +59,16 @@ static void writeTable(TsMuxerContext* _pMuxCtx, int64_t _nPts)
                 _pMuxCtx->arg.output(_pMuxCtx->arg.pOpaque,_pMuxCtx->tsPacket, 188);
                 
                 nCount =getPidCounter(_pMuxCtx, 0x1000);
-                if (_pMuxCtx->arg.nAudioFormat == TK_AUDIO_AAC) {
-                        nLen = WritePMT(_pMuxCtx->tsPacket, 1, nCount, ADAPTATION_JUST_PAYLOAD, STREAM_TYPE_VIDEO_H264, STREAM_TYPE_AUDIO_AAC);
-                } else {
-                        nLen = WritePMT(_pMuxCtx->tsPacket, 1, nCount, ADAPTATION_JUST_PAYLOAD, STREAM_TYPE_VIDEO_H264, STREAM_TYPE_PRIVATE_DATA);
+                //TODO
+                int nAudioType = STREAM_TYPE_AUDIO_AAC;
+                int nVideoType = STREAM_TYPE_VIDEO_H264;
+                if (_pMuxCtx->arg.nAudioFormat != TK_AUDIO_AAC) {
+                        nAudioType = STREAM_TYPE_PRIVATE_DATA;
                 }
+                if (_pMuxCtx->arg.nVideoFormat != TK_VIDEO_H264) {
+                        nVideoType = STREAM_TYPE_VIDEO_HEVC;
+                }
+                nLen = WritePMT(_pMuxCtx->tsPacket, 1, nCount, ADAPTATION_JUST_PAYLOAD, nVideoType, nAudioType);
                 memset(&_pMuxCtx->tsPacket[nLen], 0xff, 188 - nLen);
                 _pMuxCtx->arg.output(_pMuxCtx->arg.pOpaque,_pMuxCtx->tsPacket, 188);
         }
