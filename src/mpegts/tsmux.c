@@ -46,10 +46,12 @@ static void writeTable(TsMuxerContext* _pMuxCtx, int64_t _nPts)
         int nLen = 0;
         int nCount = 0;
         if (_pMuxCtx->nLastPts == 0 || _nPts - _pMuxCtx->nLastPts > 300) {
+                /*
                 nCount =getPidCounter(_pMuxCtx, 0x11);
                 nLen = WriteSDT(_pMuxCtx->tsPacket, 1, nCount, ADAPTATION_JUST_PAYLOAD);
                 memset(&_pMuxCtx->tsPacket[nLen], 0xff, 188 - nLen);
                 _pMuxCtx->arg.output(_pMuxCtx->arg.pOpaque,_pMuxCtx->tsPacket, 188);
+                 */
                 
                 nCount =getPidCounter(_pMuxCtx, 0x00);
                 nLen = WritePAT(_pMuxCtx->tsPacket, 1, nCount, ADAPTATION_JUST_PAYLOAD);
