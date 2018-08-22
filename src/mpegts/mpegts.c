@@ -152,7 +152,6 @@ int GetPESData(PES *_pPes, int _nCounter, int _nPid, uint8_t *_pData, int _nLen)
                 pData[3] = _pPes->nStreamId; //stream_id 8bit
                 
                 int nLen = _pPes->nESDataLen + 8; //PES_packet_length 16bit header[6-13]长度为8
-                //int nLen = _pPes->nESDataLen; //PES_packet_length
                 if (nLen > 65535) {
                         //A value of zero for the PES packet length can be used only when the PES packet payload is a video elementary stream
                         assert(_pPes->nStreamId >= 0xE0 && _pPes->nStreamId <= 0xEF);
@@ -329,7 +328,7 @@ int WritePAT(uint8_t *_pBuf, int _nUinitStartIndicator, int _nCount, int _nAdapt
         _pBuf[10] = 0xF0; //reserved 3bit(7);
         _pBuf[11] = 0x00; //program_map_PID 13bit(4096)
         
-        uint32_t c32 = crc32(_pBuf, 35);
+        uint32_t c32 = crc32(_pBuf, 12);
         uint8_t *pTmp =  (uint8_t*)&c32;
         _pBuf[12] = pTmp[3];
         _pBuf[13] = pTmp[2];
@@ -384,7 +383,7 @@ int WritePMT(uint8_t *_pBuf, int _nUinitStartIndicator, int _nCount, int _nAdapt
         _pBuf[20] = 0xF0; //reserved 4bit, include program_info_length 4bit
         _pBuf[21] = 0x00; //remaint program_info_length 8bit
         
-        uint32_t c32 = crc32(_pBuf, 35);
+        uint32_t c32 = crc32(_pBuf, 22);
         uint8_t *pTmp =  (uint8_t*)&c32;
         _pBuf[22] = pTmp[3];
         _pBuf[23] = pTmp[2];
