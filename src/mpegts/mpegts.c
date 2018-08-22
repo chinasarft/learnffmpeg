@@ -202,13 +202,18 @@ int GetPESData(PES *_pPes, int _nCounter, int _nPid, uint8_t *_pData, int _nLen)
         _pPes->nPos += nReadLen;
         nRetLen += nReadLen;
         assert(nRetLen + nAdapLen == 188);
-        return nRetLen;
+        return 188;
 }
 
 void SetAdaptationFieldFlag(uint8_t *_pBuf, int _nAdaptationField)
 {
         _pBuf[3] |= (_nAdaptationField << 4);
         return;
+}
+
+void WriteContinuityCounter(uint8_t *_pBuf, int _nCounter)
+{
+        _pBuf[3] |= _nCounter;
 }
 
 int WriteTsHeader(uint8_t *_pBuf, int _nUinitStartIndicator, int _nCount, int _nPid, int _nAdaptationField)

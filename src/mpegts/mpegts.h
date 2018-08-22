@@ -57,6 +57,7 @@ int GetPESData(PES *pPes, int _nCounter, int _nPid, uint8_t *pData, int nLen ); 
 
 int WriteTsHeader(uint8_t *_pBuf, int _nUinitStartIndicator, int _nCount, int _nPid, int _nAdaptationField);
 void SetAdaptationFieldFlag(uint8_t *_pBuf, int _nAdaptationField);
+void WriteContinuityCounter(uint8_t *pBuf, int nCounter);
 int WriteSDT(uint8_t *_pBuf, int _nUinitStartIndicator, int _nCount, int _nAdaptationField);
 int WritePAT(uint8_t *_pBuf, int _nUinitStartIndicator, int _nCount, int _nAdaptationField);
 int WritePMT(uint8_t *_pBuf, int _nUinitStartIndicator, int _nCount, int _nAdaptationField, int _nVStreamType, int _nAStreamType);

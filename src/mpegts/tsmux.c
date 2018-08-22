@@ -77,18 +77,27 @@ TsMuxerContext * NewTsMuxerContext(TsMuxerArg *pArg)
         return pTsMuxerCtx;
 }
 
+static void makeTsPacket(TsMuxerContext* _pMuxCtx, int _nPid)
+{
+        int nReadLen = 0;
+        int nCount = 0;
+        do {
+                
+                nReadLen = GetPESData(&_pMuxCtx->pes, 0, _nPid, _pMuxCtx->tsPacket, 188);
+                if (nReadLen == 188){
+                        nCount = getPidCounter(_pMuxCtx, _nPid);
+                        WriteContinuityCounter(_pMuxCtx->tsPacket, nCount);
+                        _pMuxCtx->arg.output(_pMuxCtx->arg.pOpaque, _pMuxCtx->tsPacket, 188);
+                }
+        }while(nReadLen != 0);
+}
+
 int MuxerAudio(TsMuxerContext* _pMuxCtx, uint8_t *_pData, int _nDataLen, int64_t _nPts)
 {
         writeTable(_pMuxCtx, _nPts);
        
         InitAudioPES(&_pMuxCtx->pes, _pData, _nDataLen, _nPts);
-        int nReadLen = 0;
-        int nCount = 0;
-        do {
-                nCount = getPidCounter(_pMuxCtx, AUDIO_PID);
-                nReadLen = GetPESData(&_pMuxCtx->pes, nCount, AUDIO_PID, _pMuxCtx->tsPacket, 188);
-                _pMuxCtx->arg.output(_pMuxCtx->arg.pOpaque, _pMuxCtx->tsPacket, 188);
-        }while(nReadLen != 0);
+        makeTsPacket(_pMuxCtx, AUDIO_PID);
         
         return 0;
 }
@@ -103,13 +112,7 @@ int MuxerVideo(TsMuxerContext* _pMuxCtx, uint8_t *_pData, int _nDataLen, int64_t
         } else {
                 InitVideoPES(&_pMuxCtx->pes, _pData, _nDataLen, _nPts);
         }
-        int nReadLen = 0;
-        int nCount;
-        do {
-                nCount = getPidCounter(_pMuxCtx, VIDEO_PID);
-                nReadLen = GetPESData(&_pMuxCtx->pes, nCount, VIDEO_PID, _pMuxCtx->tsPacket, 188);
-                _pMuxCtx->arg.output(_pMuxCtx->arg.pOpaque, _pMuxCtx->tsPacket, 188);
-        }while(nReadLen != 0);
+        makeTsPacket(_pMuxCtx, VIDEO_PID);
         
         return 0;
 }
