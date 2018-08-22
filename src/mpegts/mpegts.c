@@ -115,11 +115,11 @@ static int writePcrBits(uint8_t *buf, int64_t pcr)
 
 static int writeAdaptationFieldJustWithPCR(uint8_t *_pBuf, int64_t _nPcr)
 {
-        _pBuf[0] = 0x07; //
         _pBuf[1] = 0x10; //discontinuity_indicator 1bit(0); random_access_indicator 1bit(0); elementary_stream_priority_indicator 1bit(0)
         //PCR_flag 1bit(1); OPCR_flag 1bit(0); splicing_point_flag 1bit(0); transport_private_data_flag 1bit(0); adaptation_field_extension_flag 1bit(0)
         
         int nPcrLen = writePcrBits(&_pBuf[2], _nPcr);
+        _pBuf[0] = nPcrLen + 1; //adaptation_field_length 8bit
         return nPcrLen+2;
 }
 
@@ -135,11 +135,10 @@ int GetPESData(PES *_pPes, int _nCounter, int _nPid, uint8_t *_pData, int _nLen)
         if (_pPes->nPos == 0) {
                 nRetLen = WriteTsHeader(pData, 1, _nCounter, _nPid, ADAPTATION_JUST_PAYLOAD);
                 //https://en.wikipedia.org/wiki/Packetized_elementary_stream
-                pData[4] = 0; //pointer
-                nRetLen++;
-                pData += 5;
+                pData += nRetLen;
                 
                 if (_pPes->nWithPcr == 1) {
+                        SetAdaptationFieldFlag(_pData, ADAPTATION_BOTH);
                         int nAdaLen = writeAdaptationFieldJustWithPCR(pData, _pPes->nPts);
                         nRetLen += nAdaLen;
                         pData += nAdaLen;
@@ -153,7 +152,8 @@ int GetPESData(PES *_pPes, int _nCounter, int _nPid, uint8_t *_pData, int _nLen)
                 pData[3] = _pPes->nStreamId; //stream_id 8bit
                 
                 int nLen = _pPes->nESDataLen + 8; //PES_packet_length 16bit header[6-13]长度为8
-                if (_pPes->nESDataLen + 8 > 65535) {
+                //int nLen = _pPes->nESDataLen; //PES_packet_length
+                if (nLen > 65535) {
                         //A value of zero for the PES packet length can be used only when the PES packet payload is a video elementary stream
                         assert(_pPes->nStreamId >= 0xE0 && _pPes->nStreamId <= 0xEF);
                         pData[4] = 0;
@@ -176,7 +176,7 @@ int GetPESData(PES *_pPes, int _nCounter, int _nPid, uint8_t *_pData, int _nLen)
                 pData[12] =  (_pPes->nPts >> 7 & 0xFF);
                 pData[13] = 0x01 | ((_pPes->nPts << 1 ) & 0xFE);
                 nRetLen += 14;
-                
+                /*
                 int nReadLen = nRemainLen > _nLen ? _nLen : nRemainLen;
                 if (nReadLen + nRetLen > 188) {
                         nReadLen = 188 - nRetLen;
@@ -190,21 +190,33 @@ int GetPESData(PES *_pPes, int _nCounter, int _nPid, uint8_t *_pData, int _nLen)
                         SetAdaptationFieldFlag(_pData, ADAPTATION_BOTH);
                 }
                 return nRetLen;
-        } 
+                 */
+        }  else {
+                nRetLen = WriteTsHeader(pData, 0, _nCounter, _nPid, ADAPTATION_JUST_PAYLOAD);
+        }
 
-        nRetLen = WriteTsHeader(pData, 0, _nCounter, _nPid, ADAPTATION_JUST_PAYLOAD);
+        int nAdapLen = 0;
         int nReadLen = nRemainLen > _nLen ? _nLen : nRemainLen;
-        if (nReadLen + nRetLen > 188) {
+        if (nReadLen + nRetLen >= 188) {
                 nReadLen = 188 - nRetLen;
+                memcpy(&_pData[nRetLen], _pPes->pESData + _pPes->nPos, nReadLen);
+        } else {
+                nRetLen += 2; //两字节的adaptation_field
+                if (nReadLen + nRetLen > 188) {
+                        nReadLen = 188 - nRetLen;
+                }
+                nAdapLen = 188 - nRetLen - nReadLen;
+
+                _pData[nRetLen-2] = nAdapLen + 1; //adaptation_field_lenght不算，但是后面的一个字节算
+                _pData[nRetLen-1] = 0x00;
+                SetAdaptationFieldFlag(_pData, ADAPTATION_BOTH); //前面填充ff,然后才是数据
+                memset(_pData + nRetLen, 0xff, nAdapLen);
+                memcpy(&_pData[188 - nReadLen], _pPes->pESData + _pPes->nPos, nReadLen);
         }
-        memcpy(&_pData[nRetLen], _pPes->pESData + _pPes->nPos, nReadLen);
         
-        _pPes->nPos += (nReadLen + nRetLen);
+        _pPes->nPos += nReadLen;
         nRetLen += nReadLen;
-        if (nRetLen < 188) {
-                memset(_pData + nRetLen, 0xff, 188 - nRetLen);
-                SetAdaptationFieldFlag(_pData, ADAPTATION_BOTH);
-        }
+        assert(nRetLen + nAdapLen == 188);
         return nRetLen;
 }
 

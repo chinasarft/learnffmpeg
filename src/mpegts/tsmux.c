@@ -25,7 +25,7 @@ static uint16_t getPidCounter(TsMuxerContext* _pMuxCtx, uint64_t _nPID)
                 if (_pMuxCtx->pidCounterMap[i].nPID == _nPID) {
                         if (_pMuxCtx->pidCounterMap[i].nCounter == 0x0F){
                                 _pMuxCtx->pidCounterMap[i].nCounter = 0;
-                                return 0;
+                                return 0x0F;
                         }
                         nCount = _pMuxCtx->pidCounterMap[i].nCounter++;
                         return nCount;

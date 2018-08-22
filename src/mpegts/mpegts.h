@@ -10,8 +10,8 @@
 #define SDT_PID                 0x0011
 //下面的pid不是标准，完全是因为简单化
 #define PMT_PID 0x1000
-#define VIDEO_PID 0x101
-#define AUDIO_PID 0x100
+#define VIDEO_PID 0x100
+#define AUDIO_PID 0x101
 
 /* table ids */
 #define PAT_TID   0x00

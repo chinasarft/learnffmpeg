@@ -3,8 +3,9 @@
 #include <sys/time.h>
 #include <unistd.h>
 #include <signal.h>
-#include "tsmux.h"
 #include "adts.h"
+#include "tsmux.h"
+
 TsMuxerArg avArg;
 
 typedef int (*DataCallback)(void *opaque, void *pData, int nDataLen, int nFlag, int64_t timestamp, int nIsKeyFrame);
@@ -12,10 +13,10 @@ typedef int (*DataCallback)(void *opaque, void *pData, int nDataLen, int nFlag, 
 #define THIS_IS_VIDEO 2
 
 #define TEST_AAC 1
-#define TEST_AAC_NO_ADTS 1
+//#define TEST_AAC_NO_ADTS 1
 #define USE_LINK_ACC 1
 
-#define INPUT_FROM_FFMPEG
+//#define INPUT_FROM_FFMPEG
 
 #ifdef INPUT_FROM_FFMPEG
 #include <libavformat/avformat.h>
@@ -30,6 +31,9 @@ typedef struct ADTS{
         ADTSFixheader fix;
         ADTSVariableHeader var;
 }ADTS;
+#endif
+#ifndef TEST_AAC_NO_ADTS
+
 #endif
 
 
@@ -350,7 +354,8 @@ int start_file_test(char * _pAudioFile, char * _pVideoFile, DataCallback callbac
                                                 }
                                                 audioOffset += adts.var.aac_frame_length;
                                                 aacFrameCount++;
-                                                int64_t d = ((1024*1000.0)/aacfreq[adts.fix.sampling_frequency_index]) * aacFrameCount;
+                                                int nFreq = aacfreq[adts.fix.sampling_frequency_index];
+                                                int64_t d = ((1024*1000.0)/nFreq/adts.fix.channel_configuration) * aacFrameCount;
                                                 nNextAudioTime = nSysTimeBase + d;
                                         } else {
                                                 bAudioOk = 0;
@@ -400,6 +405,41 @@ int start_file_test(char * _pAudioFile, char * _pVideoFile, DataCallback callbac
 }
 
 #ifdef INPUT_FROM_FFMPEG
+
+static int getAacFreqIndex(int _nFreq)
+{
+        switch(_nFreq){
+                case 96000:
+                        return 0;
+                case 88200:
+                        return 1;
+                case 64000:
+                        return 2;
+                case 48000:
+                        return 3;
+                case 44100:
+                        return 4;
+                case 32000:
+                        return 5;
+                case 24000:
+                        return 6;
+                case 22050:
+                        return 7;
+                case 16000:
+                        return 8;
+                case 12000:
+                        return 9;
+                case 11025:
+                        return 10;
+                case 8000:
+                        return 11;
+                case 7350:
+                        return 12;
+                default:
+                        return -1;
+        }
+}
+char gAACBuf[1024];
 int start_ffmpeg_test(char * _pUrl, DataCallback callback, void *opaque)
 {
         AVFormatContext *pFmtCtx = NULL;
@@ -469,7 +509,21 @@ int start_ffmpeg_test(char * _pUrl, DataCallback callback, void *opaque)
                         }
                         ret = callback(opaque, pkt.data, pkt.size, THIS_IS_VIDEO, pkt.pts, pkt.flags == 1);
                 } else {
-                        ret = callback(opaque, pkt.data, pkt.size, THIS_IS_AUDIO, pkt.pts, 0);
+                        //ffmpeg 没有带adts头
+                        ADTSFixheader fixHeader;
+                        ADTSVariableHeader varHeader;
+                        InitAdtsFixedHeader(&fixHeader);
+                        InitAdtsVariableHeader(&varHeader, pkt.size);
+                        fixHeader.channel_configuration = pFmtCtx->streams[pkt.stream_index]->codecpar->channels;
+                        int nFreqIdx = getAacFreqIndex(pFmtCtx->streams[pkt.stream_index]->codecpar->sample_rate);
+                        fixHeader.sampling_frequency_index = nFreqIdx;
+                        
+                        ConvertAdtsHeader2Char(&fixHeader, &varHeader, (unsigned char *)gAACBuf);
+                        int nHeaderLen = varHeader.aac_frame_length - pkt.size;
+                        memcpy(gAACBuf + nHeaderLen, pkt.data, pkt.size);
+                        pkt.size = varHeader.aac_frame_length;
+                        
+                        ret = callback(opaque, gAACBuf, varHeader.aac_frame_length, THIS_IS_AUDIO, pkt.pts, 0);
                 }
                 
                 av_packet_unref(&pkt);
@@ -495,8 +549,10 @@ static int dataCallback(void *opaque, void *pData, int nDataLen, int nFlag, int6
 {
         int ret = 0;
         if (nFlag == THIS_IS_AUDIO){
+                printf("audio pts:%lld len:%d\n", timestamp, nDataLen);
                 MuxerAudio(pTs, pData, nDataLen, timestamp);
         } else {
+                printf("video pts:%lld len:%d\n", timestamp, nDataLen);
                 MuxerVideo(pTs, pData, nDataLen, timestamp);
         }
         return ret;
@@ -522,12 +578,14 @@ int writeTs(void *pOpaque, void* pTsData, int nTsDataLen)
 
 int main(int argc, char* argv[])
 {
-#if LIBAVFORMAT_VERSION_MAJOR < 58
+#ifdef INPUT_FROM_FFMPEG
+  #if LIBAVFORMAT_VERSION_MAJOR < 58
         //int nFfmpegVersion = avcodec_version();
         av_register_all();
-#endif
-#ifdef INPUT_FROM_FFMPEG
+  #endif
+  #ifdef INPUT_FROM_FFMPEG
         avformat_network_init();
+  #endif
 #endif
         signal(SIGINT, signalHandler);
         
@@ -569,9 +627,12 @@ int main(int argc, char* argv[])
 #endif
         
 #ifdef INPUT_FROM_FFMPEG
+        printf("rtmp://localhost:1935/live/movie\n");
         start_ffmpeg_test("rtmp://localhost:1935/live/movie", dataCallback, NULL);
         //start_ffmpeg_test("rtmp://live.hkstv.hk.lxdns.com/live/hks", dataCallback, NULL);
 #else
+        printf("audio:%s\n", pAFile);
+        printf("video:%s\n", pVFile);
         start_file_test(pAFile, pVFile, dataCallback, NULL);
 #endif
 
