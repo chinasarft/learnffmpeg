@@ -12,7 +12,7 @@ typedef int (*DataCallback)(void *opaque, void *pData, int nDataLen, int nFlag, 
 #define THIS_IS_AUDIO 1
 #define THIS_IS_VIDEO 2
 
-#define TEST_AAC 1
+//#define TEST_AAC 1
 //#define TEST_AAC_NO_ADTS 1
 #define USE_LINK_ACC 1
 
@@ -36,16 +36,6 @@ typedef struct ADTS{
 
 #endif
 
-
-typedef enum {
-        TK_VIDEO_H264,
-        TK_VIDEO_H265
-}TkVideoFormat;
-typedef enum {
-        TK_AUDIO_PCMU,
-        TK_AUDIO_PCMA,
-        TK_AUDIO_AAC
-}TkAudioFormat;
 
 FILE *outTs;
 int gTotalLen = 0;

@@ -89,6 +89,14 @@ void InitAudioPES(PES *_pPes, uint8_t *_pData, int _nDataLen, int64_t _nPts)
         return;
 }
 
+void InitPrivateTypePES(PES *_pPes, uint8_t *_pData, int _nDataLen, int64_t _nPts)
+{
+        initPes(_pPes, _pData, _nDataLen, _nPts);
+        _pPes->nStreamId = 0xC0;
+        _pPes->nPrivate = 1;
+        return;
+}
+
 void NewVideoPES(PES *_pPes, uint8_t *_pData, int _nDataLen, int64_t _nPts)
 {
         initPes(_pPes, _pData, _nDataLen, _nPts);
@@ -122,6 +130,16 @@ static int writeAdaptationFieldJustWithPCR(uint8_t *_pBuf, int64_t _nPcr)
         return nPcrLen+2;
 }
 
+static int writeAdaptationFieldJustWithPravatePadding(uint8_t *_pBuf)
+{
+        _pBuf[1] = 0x00; //discontinuity_indicator 1bit(0); random_access_indicator 1bit(0); elementary_stream_priority_indicator 1bit(0)
+        //PCR_flag 1bit(0); OPCR_flag 1bit(0); splicing_point_flag 1bit(0); transport_private_data_flag 1bit(0); adaptation_field_extension_flag 1bit(0)
+        
+        memset(_pBuf+2, 0xff, 8);
+        _pBuf[0] = 9; //adaptation_field_length 8bit
+        return 10;
+}
+
 int GetPESData(PES *_pPes, int _nCounter, int _nPid, uint8_t *_pData, int _nLen)
 {
         if (_pPes->nPos == _pPes->nESDataLen)
@@ -141,7 +159,13 @@ int GetPESData(PES *_pPes, int _nCounter, int _nPid, uint8_t *_pData, int _nLen)
                         int nAdaLen = writeAdaptationFieldJustWithPCR(pData, _pPes->nPts);
                         nRetLen += nAdaLen;
                         pData += nAdaLen;
+                } else if (_pPes->nPrivate == 1) {
+                        SetAdaptationFieldFlag(_pData, ADAPTATION_BOTH);
+                        int nAdaLen = writeAdaptationFieldJustWithPravatePadding(pData);
+                        nRetLen += nAdaLen;
+                        pData += nAdaLen;
                 }
+                
                 
                 //pes packet
                 pData[0] = 0; //packet_start_code_prefix 3bit(0x000001)
@@ -168,7 +192,6 @@ int GetPESData(PES *_pPes, int _nCounter, int _nPid, uint8_t *_pData, int _nLen)
                 pData[8] = 5;//PES_header_data_length 8bit. 剩下长度， 只有pts，pes中pts/dts长度为5
                 
                 int64_t nPts = _pPes->nPts;
-                memset(&pData[9], 0, 5);
                 //pts
                 pData[9]   = 0x21 | ((nPts >> 29) & 0x0E);
                 pData[10] =  (nPts >>22 & 0xFF);

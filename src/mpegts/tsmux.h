@@ -7,10 +7,10 @@ typedef struct TsMuxerContext TsMuxerContext;
 
 
 typedef struct {
-        int nAudioFormat;
+        TkAudioFormat nAudioFormat;
         int nAudioSampleRate;
         int nAudioChannels;
-        int nVideoFormat;
+        TkVideoFormat nVideoFormat;
         TsPacketCallback output;
         void *pOpaque;
 }TsMuxerArg;

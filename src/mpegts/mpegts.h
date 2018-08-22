@@ -19,7 +19,15 @@
 #define M4OD_TID  0x05
 #define SDT_TID   0x42
 
-
+typedef enum {
+        TK_VIDEO_H264 = 1,
+        TK_VIDEO_H265 = 2
+}TkVideoFormat;
+typedef enum {
+        TK_AUDIO_PCMU = 1,
+        TK_AUDIO_PCMA = 2,
+        TK_AUDIO_AAC = 3
+}TkAudioFormat;
 
 
 #define STREAM_TYPE_PRIVATE_SECTION 0x05
@@ -46,6 +54,7 @@ typedef struct PES{
         int nPid;
         int64_t nPts;
         uint8_t nWithPcr;
+        uint8_t nPrivate;
         //设想是传入h264(或者音频)给pESData， 在封装ts时候每次应该封装多少长度的数据是应该知道的
         //也是尽量减少内存使用
 }PES;
@@ -53,6 +62,7 @@ typedef struct PES{
 void InitVideoPESWithPcr(PES *_pPes, uint8_t *_pData, int _nDataLen, int64_t _nPts);
 void InitVideoPES(PES *pPes, uint8_t *pData, int nDataLen, int64_t nPts);
 void InitAudioPES(PES *pPes, uint8_t *pData, int nDataLen, int64_t nPts);
+void InitPrivateTypePES(PES *pPes, uint8_t *pData, int nDataLen, int64_t nPts);
 int GetPESData(PES *pPes, int _nCounter, int _nPid, uint8_t *pData, int nLen ); //返回0则到了EOF
 
 int WriteTsHeader(uint8_t *_pBuf, int _nUinitStartIndicator, int _nCount, int _nPid, int _nAdaptationField);
