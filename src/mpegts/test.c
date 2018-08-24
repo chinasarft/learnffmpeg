@@ -256,7 +256,9 @@ int start_file_test(char * _pAudioFile, char * _pVideoFile, DataCallback callbac
                         uint8_t * sendp = NULL;
                         int eof = 0;
                         int type = -1;
+                        int nAccessUnitCount = 0;
                         do{
+                                nAccessUnitCount++;
                                 start = (uint8_t *)ff_avc_find_startcode((const uint8_t *)nextstart, (const uint8_t *)endptr);
                                 end = (uint8_t *)ff_avc_find_startcode(start+4, endptr);
                                 
@@ -304,12 +306,12 @@ int start_file_test(char * _pAudioFile, char * _pVideoFile, DataCallback callbac
                                                 printf("unknown type:%d\n", type);
                                                 continue;
                                         }
-                                        //printf("%d------------->%d\n",dlen, type);
+                                        printf("audlen:%d-------type:%02d------>%d len:%d\n",dlen, type, nAccessUnitCount, end-start);
                                         if(hevctype == HEVC_I || hevctype == HEVC_B ){
-                                                if (type == 20) {
-                                                        nNonIDR++;
-                                                } else {
+                                                if (hevctype == HEVC_I) {
                                                         nIDR++;
+                                                } else {
+                                                        nNonIDR++;
                                                 }
                                                 //printf("send one video(%d) frame packet:%ld", type, end - sendp);
                                                 cbRet = callback(opaque, sendp, end - sendp, THIS_IS_VIDEO, nNextVideoTime-nSysTimeBase, hevctype == HEVC_I);
@@ -535,14 +537,16 @@ end:
 #endif
 
 TsMuxerContext *pTs;
+int nVideoTotal;
 static int dataCallback(void *opaque, void *pData, int nDataLen, int nFlag, int64_t timestamp, int nIsKeyFrame)
 {
         int ret = 0;
         if (nFlag == THIS_IS_AUDIO){
-                printf("audio pts:%lld len:%d\n", timestamp, nDataLen);
+                //printf("audio pts:%lld len:%d\n", timestamp, nDataLen);
                 MuxerAudio(pTs, pData, nDataLen, timestamp);
         } else {
-                printf("video pts:%lld len:%d\n", timestamp, nDataLen);
+                nVideoTotal+=nDataLen;
+                //printf("video pts:%lld len:%d\n", timestamp, nDataLen);
                 MuxerVideo(pTs, pData, nDataLen, timestamp);
         }
         return ret;
@@ -627,6 +631,7 @@ int main(int argc, char* argv[])
 #endif
 
         DestroyTsMuxerContext(pTs);
+        printf("nVideoTotal:%d\n:", nVideoTotal);
         return 0;
 }
 

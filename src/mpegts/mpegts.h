@@ -55,15 +55,16 @@ typedef struct PES{
         int64_t nPts;
         uint8_t nWithPcr;
         uint8_t nPrivate;
+        TkVideoFormat videoFormat;
         //设想是传入h264(或者音频)给pESData， 在封装ts时候每次应该封装多少长度的数据是应该知道的
         //也是尽量减少内存使用
 }PES;
 
-void InitVideoPESWithPcr(PES *_pPes, uint8_t *_pData, int _nDataLen, int64_t _nPts);
-void InitVideoPES(PES *pPes, uint8_t *pData, int nDataLen, int64_t nPts);
+void InitVideoPESWithPcr(PES *_pPes, TkVideoFormat fmt, uint8_t *_pData, int _nDataLen, int64_t _nPts);
+void InitVideoPES(PES *pPes, TkVideoFormat fmt, uint8_t *pData, int nDataLen, int64_t nPts);
 void InitAudioPES(PES *pPes, uint8_t *pData, int nDataLen, int64_t nPts);
 void InitPrivateTypePES(PES *pPes, uint8_t *pData, int nDataLen, int64_t nPts);
-int GetPESData(PES *pPes, int _nCounter, int _nPid, uint8_t *pData, int nLen ); //返回0则到了EOF
+int GetPESData(PES *pPes, int _nCounter, int _nPid, uint8_t *pData, int nLen); //返回0则到了EOF
 
 int WriteTsHeader(uint8_t *_pBuf, int _nUinitStartIndicator, int _nCount, int _nPid, int _nAdaptationField);
 void SetAdaptationFieldFlag(uint8_t *_pBuf, int _nAdaptationField);

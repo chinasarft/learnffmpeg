@@ -46,6 +46,9 @@ static uint32_t crc_table[256] = {
         0x933eb0bb, 0x97ffad0c, 0xafb010b1, 0xab710d06, 0xa6322bdf, 0xa2f33668,
         0xbcb4666d, 0xb8757bda, 0xb5365d03, 0xb1f740b4};
 
+static uint8_t h265Aud[] = {0x00, 0x00, 0x00, 0x01, 0x46, 0x01, 0x50};
+static uint8_t h264Aud[] = {0x00, 0x00, 0x00, 0x01, 0x09, 0xF0};
+
 uint32_t crc32 (uint8_t *data, int len)
 {
         register int i;
@@ -67,17 +70,18 @@ static void initPes(PES *_pPes, uint8_t *_pData, int _nDataLen, int64_t _nPts)
         return;
 }
 
-void InitVideoPES(PES *_pPes, uint8_t *_pData, int _nDataLen, int64_t _nPts)
+void InitVideoPES(PES *_pPes, TkVideoFormat _fmt, uint8_t *_pData, int _nDataLen, int64_t _nPts)
 {
         initPes(_pPes, _pData, _nDataLen, _nPts);
         _pPes->nStreamId = 0xE0;
         _pPes->nWithPcr = 0;
+        _pPes->videoFormat = _fmt;
         return;
 }
 
-void InitVideoPESWithPcr(PES *_pPes, uint8_t *_pData, int _nDataLen, int64_t _nPts)
+void InitVideoPESWithPcr(PES *_pPes, TkVideoFormat fmt, uint8_t *_pData, int _nDataLen, int64_t _nPts)
 {
-        InitVideoPES(_pPes, _pData, _nDataLen, _nPts);
+        InitVideoPES(_pPes, fmt, _pData, _nDataLen, _nPts);
         _pPes->nWithPcr = 1;
         return;
 }
@@ -140,6 +144,16 @@ static int writeAdaptationFieldJustWithPravatePadding(uint8_t *_pBuf)
         return 10;
 }
 
+#define AV_RB16(x)                           \
+     ((((const uint8_t*)(x))[0] << 8) |          \
+       ((const uint8_t*)(x))[1])
+static void printPts(uint8_t *buf){
+        int64_t pts = (int64_t)(*buf & 0x0e) << 29 |
+        (AV_RB16(buf+1) >> 1) << 15 |
+        AV_RB16(buf+3) >> 1;
+        printf("pes pts:%lld\n", pts/90);
+}
+
 int GetPESData(PES *_pPes, int _nCounter, int _nPid, uint8_t *_pData, int _nLen)
 {
         if (_pPes->nPos == _pPes->nESDataLen)
@@ -148,7 +162,7 @@ int GetPESData(PES *_pPes, int _nCounter, int _nPid, uint8_t *_pData, int _nLen)
         int nRetLen = 0;
         int nRemainLen = _pPes->nESDataLen - _pPes->nPos;
         uint8_t * pData = _pData;
-        
+        uint8_t * pPts = NULL;
         if (_pPes->nPos == 0) {
                 nRetLen = WriteTsHeader(pData, 1, _nCounter, _nPid, ADAPTATION_JUST_PAYLOAD);
                 //https://en.wikipedia.org/wiki/Packetized_elementary_stream
@@ -175,6 +189,11 @@ int GetPESData(PES *_pPes, int _nCounter, int _nPid, uint8_t *_pData, int _nLen)
                 pData[3] = _pPes->nStreamId; //stream_id 8bit
                 
                 int nLen = _pPes->nESDataLen + 8; //PES_packet_length 16bit header[6-13]长度为8
+                if (_pPes->videoFormat == TK_VIDEO_H264) {
+                        nLen += sizeof(h264Aud);
+                } else if (_pPes->videoFormat == TK_VIDEO_H265) {
+                        nLen += sizeof(h265Aud);
+                }
                 if (nLen > 65535) {
                         //A value of zero for the PES packet length can be used only when the PES packet payload is a video elementary stream
                         assert(_pPes->nStreamId >= 0xE0 && _pPes->nStreamId <= 0xEF);
@@ -199,6 +218,15 @@ int GetPESData(PES *_pPes, int _nCounter, int _nPid, uint8_t *_pData, int _nLen)
                 pData[12] =  (nPts >> 7 & 0xFF);
                 pData[13] = 0x01 | ((nPts << 1 ) & 0xFE);
                 nRetLen += 14;
+                pPts=pData+9;
+                
+                if (_pPes->videoFormat == TK_VIDEO_H264) {
+                        memcpy(&_pData[nRetLen], h264Aud, sizeof(h264Aud));
+                        nRetLen += sizeof(h264Aud);
+                } else if (_pPes->videoFormat == TK_VIDEO_H265) {
+                        memcpy(&_pData[nRetLen], h265Aud, sizeof(h265Aud));
+                        nRetLen += sizeof(h265Aud);
+                }
         }  else {
                 nRetLen = WriteTsHeader(pData, 0, _nCounter, _nPid, ADAPTATION_JUST_PAYLOAD);
         }
@@ -225,6 +253,8 @@ int GetPESData(PES *_pPes, int _nCounter, int _nPid, uint8_t *_pData, int _nLen)
         _pPes->nPos += nReadLen;
         nRetLen += nReadLen;
         assert(nRetLen + nAdapLen == 188);
+        if (pPts != NULL && (_pPes->videoFormat == TK_VIDEO_H264 || _pPes->videoFormat == TK_VIDEO_H265))
+                printPts(pPts);
         return 188;
 }
 

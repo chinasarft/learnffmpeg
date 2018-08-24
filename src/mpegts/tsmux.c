@@ -45,7 +45,7 @@ static void writeTable(TsMuxerContext* _pMuxCtx, int64_t _nPts)
 {
         int nLen = 0;
         int nCount = 0;
-        if (_pMuxCtx->nLastPts == 0 || _nPts - _pMuxCtx->nLastPts > 300) {
+        if (_pMuxCtx->nLastPts == 0 || _nPts - _pMuxCtx->nLastPts > 300 * 90) { //300毫米间隔
                 /*
                 nCount =getPidCounter(_pMuxCtx, 0x11);
                 nLen = WriteSDT(_pMuxCtx->tsPacket, 1, nCount, ADAPTATION_JUST_PAYLOAD);
@@ -123,9 +123,9 @@ int MuxerVideo(TsMuxerContext* _pMuxCtx, uint8_t *_pData, int _nDataLen, int64_t
         
         if (_pMuxCtx->nPcrFlag == 0) {
                 _pMuxCtx->nPcrFlag = 1;
-                InitVideoPESWithPcr(&_pMuxCtx->pes, _pData, _nDataLen, _nPts);
+                InitVideoPESWithPcr(&_pMuxCtx->pes, _pMuxCtx->arg.nVideoFormat, _pData, _nDataLen, _nPts);
         } else {
-                InitVideoPES(&_pMuxCtx->pes, _pData, _nDataLen, _nPts);
+                InitVideoPES(&_pMuxCtx->pes, _pMuxCtx->arg.nVideoFormat, _pData, _nDataLen, _nPts);
         }
         makeTsPacket(_pMuxCtx, VIDEO_PID);
         
