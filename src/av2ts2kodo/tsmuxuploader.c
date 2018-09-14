@@ -8,6 +8,7 @@
 #else
 #include <sys/sysinfo.h>
 #endif
+#include "servertime.h"
 
 #ifdef USE_OWN_TSMUX
 #include "tsmux.h"
@@ -33,32 +34,41 @@ typedef struct _FFTsMuxContext{
         int nOutAudioindex_;
         int64_t nPrevAudioTimestamp;
         int64_t nPrevVideoTimestamp;
+        TsMuxUploader * pTsMuxUploader;
 }FFTsMuxContext;
+
+typedef struct _Token {
+        int nQuit;
+        char * pPrevToken_;
+        int nPrevTokenLen_;
+        char * pToken_;
+        int nTokenLen_;
+        pthread_mutex_t tokenMutex_;
+}Token;
 
 typedef struct _FFTsMuxUploader{
         TsMuxUploader tsMuxUploader_;
         pthread_mutex_t muxUploaderMutex_;
-        char *pToken_;
         unsigned char *pAACBuf;
         int nAACBufLen;
-        char ak_[64];
-        char sk_[64];
-        char bucketName_[256];
-        int deleteAfterDays_;
-        char callback_[512];
         FFTsMuxContext *pTsMuxCtx;
         
         int64_t nLastVideoTimestamp;
         int64_t nLastUploadVideoTimestamp; //initial to -1
         int nKeyFrameCount;
         int nFrameCount;
-        int nSegmentId;
         AvArg avArg;
         UploadState ffMuxSatte;
+        
+        int nUploadBufferSize;
+        int nNewSegmentInterval;
+        
+        char deviceId_[65];
+        Token token_;
+        UploadArg uploadArg;
 }FFTsMuxUploader;
 
 static int aAacfreqs[13] = {96000, 88200, 64000, 48000, 44100, 32000, 24000, 22050 ,16000 ,12000, 11025, 8000, 7350};
-static int gnQBufsize = 0;
 
 static int getAacFreqIndex(int _nFreq)
 {
@@ -293,7 +303,7 @@ static int PushVideo(TsMuxUploader *_pTsMuxUploader, char * _pData, int _nDataLe
                         pFFTsMuxUploader->ffMuxSatte = TK_UPLOAD_INIT;
                         pushRecycle(pFFTsMuxUploader);
                         if (_nIsSegStart) {
-                                pFFTsMuxUploader->nSegmentId = (int64_t)time(NULL);
+                                pFFTsMuxUploader->uploadArg.nSegmentId_ = GetCurrentNanosecond();
                         }
                         ret = TsMuxUploaderStart(_pTsMuxUploader);
                         if (ret != 0) {
@@ -354,6 +364,20 @@ static int waitToCompleUploadAndDestroyTsMuxContext(void *_pOpaque)
                 }
                 avformat_free_context(pTsMuxCtx->pFmtCtx_);
 #endif
+                FFTsMuxUploader *pFFTsMuxUploader = (FFTsMuxUploader *)(pTsMuxCtx->pTsMuxUploader);
+                if (pFFTsMuxUploader) {
+                        if (pFFTsMuxUploader->pAACBuf) {
+                                free(pFFTsMuxUploader->pAACBuf);
+                        }
+                        if (pFFTsMuxUploader->token_.pToken_) {
+                                free(pFFTsMuxUploader->token_.pToken_);
+                                pFFTsMuxUploader->token_.pToken_ = NULL;
+                        }
+                        if (pFFTsMuxUploader->token_.pPrevToken_) {
+                                free(pFFTsMuxUploader->token_.pPrevToken_);
+                        }
+                        free(pFFTsMuxUploader);
+                }
                 free(pTsMuxCtx);
         }
         
@@ -363,16 +387,16 @@ static int waitToCompleUploadAndDestroyTsMuxContext(void *_pOpaque)
 #define getFFmpegErrorMsg(errcode) char msg[128];\
                 av_strerror(errcode, msg, sizeof(msg))
 
-static void inline setQBufferSize(char *desc, int s)
+static void inline setQBufferSize(FFTsMuxUploader *pFFTsMuxUploader, char *desc, int s)
 {
-        gnQBufsize = s;
-        loginfo("desc:(%s) buffer Q size is:%d", desc, gnQBufsize);
+        pFFTsMuxUploader->nUploadBufferSize = s;
+        loginfo("desc:(%s) buffer Q size is:%d", desc, pFFTsMuxUploader->nUploadBufferSize);
         return;
 }
 
-static int getBufferSize() {
-        if (gnQBufsize != 0) {
-                return gnQBufsize;
+static int getBufferSize(FFTsMuxUploader *pFFTsMuxUploader) {
+        if (pFFTsMuxUploader->nUploadBufferSize != 0) {
+                return pFFTsMuxUploader->nUploadBufferSize;
         }
         int nSize = 256*1024;
         int64_t nTotalMemSize = 0;
@@ -390,44 +414,43 @@ static int getBufferSize() {
         nTotalMemSize = info.totalram;
 #endif
         if (nRet != 0) {
-                setQBufferSize("default", nSize);
-                return gnQBufsize;
+                setQBufferSize(pFFTsMuxUploader, "default", nSize);
+                return pFFTsMuxUploader->nUploadBufferSize;
         }
         loginfo("toto memory size:%lld\n", nTotalMemSize);
         
         int64_t M = 1024 * 1024;
         if (nTotalMemSize <= 32 * M) {
-                setQBufferSize("le 32M", nSize);
-                return gnQBufsize;
+                setQBufferSize(pFFTsMuxUploader, "le 32M", nSize);
+                return pFFTsMuxUploader->nUploadBufferSize;
         } else if (nTotalMemSize <= 64 * M) {
-                setQBufferSize("le 64M", nSize * 2);
-                return gnQBufsize;
+                setQBufferSize(pFFTsMuxUploader, "le 64M", nSize * 2);
+                return pFFTsMuxUploader->nUploadBufferSize;
         } else if (nTotalMemSize <= 128 * M) {
-                setQBufferSize("le 128M", nSize * 3);
-                return gnQBufsize;
+                setQBufferSize(pFFTsMuxUploader, "le 128M", nSize * 3);
+                return pFFTsMuxUploader->nUploadBufferSize;
         } else if (nTotalMemSize <= 256 * M) {
-                setQBufferSize("le 256M", nSize * 4);
-                return gnQBufsize;
+                setQBufferSize(pFFTsMuxUploader, "le 256M", nSize * 4);
+                return pFFTsMuxUploader->nUploadBufferSize;
         } else if (nTotalMemSize <= 512 * M) {
-                setQBufferSize("le 512M", nSize * 6);
-                return gnQBufsize;
+                setQBufferSize(pFFTsMuxUploader, "le 512M", nSize * 6);
+                return pFFTsMuxUploader->nUploadBufferSize;
         } else if (nTotalMemSize <= 1024 * M) {
-                setQBufferSize("le 1G", nSize * 8);
-                return gnQBufsize;
+                setQBufferSize(pFFTsMuxUploader, "le 1G", nSize * 8);
+                return pFFTsMuxUploader->nUploadBufferSize;
         } else if (nTotalMemSize <= 2 * 1024 * M) {
-                setQBufferSize("le 2G", nSize * 10);
-                return gnQBufsize;
+                setQBufferSize(pFFTsMuxUploader, "le 2G", nSize * 10);
+                return pFFTsMuxUploader->nUploadBufferSize;
         } else if (nTotalMemSize <= 4 * 1024 * M) {
-                setQBufferSize("le 4G", nSize * 12);
-                return gnQBufsize;
+                setQBufferSize(pFFTsMuxUploader, "le 4G", nSize * 12);
+                return pFFTsMuxUploader->nUploadBufferSize;
         } else {
-                setQBufferSize("gt 4G", nSize * 16);
-                return gnQBufsize;
+                setQBufferSize(pFFTsMuxUploader, "gt 4G", nSize * 16);
+                return pFFTsMuxUploader->nUploadBufferSize;
         }
-        return gnQBufsize;
 }
 
-static int newTsMuxContext(FFTsMuxContext ** _pTsMuxCtx, AvArg *_pAvArg)
+static int newTsMuxContext(FFTsMuxContext ** _pTsMuxCtx, AvArg *_pAvArg, UploadArg *_pUploadArg, int nQBufSize)
 #ifdef USE_OWN_TSMUX
 {
         FFTsMuxContext * pTsMuxCtx = (FFTsMuxContext *)malloc(sizeof(FFTsMuxContext));
@@ -435,9 +458,8 @@ static int newTsMuxContext(FFTsMuxContext ** _pTsMuxCtx, AvArg *_pAvArg)
                 return TK_NO_MEMORY;
         }
         memset(pTsMuxCtx, 0, sizeof(FFTsMuxContext));
-        
-        int nBufsize = getBufferSize();
-        int ret = NewUploader(&pTsMuxCtx->pTsUploader_, TSQ_FIX_LENGTH, 188, nBufsize / 188);
+
+        int ret = NewUploader(&pTsMuxCtx->pTsUploader_, _pUploadArg, TSQ_FIX_LENGTH, 188, nQBufSize / 188);
         if (ret != 0) {
                 free(pTsMuxCtx);
                 return ret;
@@ -473,7 +495,7 @@ static int newTsMuxContext(FFTsMuxContext ** _pTsMuxCtx, AvArg *_pAvArg)
         memset(pTsMuxCtx, 0, sizeof(FFTsMuxContext));
         
         int nBufsize = getBufferSize();
-        int ret = NewUploader(&pTsMuxCtx->pTsUploader_, TSQ_FIX_LENGTH, FF_OUT_LEN, nBufsize / FF_OUT_LEN);
+        int ret = NewUploader(&pTsMuxCtx->pTsUploader_, _pUploadArg, TSQ_FIX_LENGTH, FF_OUT_LEN, nBufsize / FF_OUT_LEN);
         if (ret != 0) {
                 free(pTsMuxCtx);
                 return ret;
@@ -589,153 +611,102 @@ end:
 }
 #endif
 
-static const unsigned char pr2six[256] = {
-        64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64,
-        64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64,
-        64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 62, 64, 63,
-        52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 64, 64, 64, 64, 64, 64,
-        64,  0,  1,  2,  3,  4,  5,  6,  7,  8,  9, 10, 11, 12, 13, 14,
-        15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 64, 64, 64, 64, 63,
-        64, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40,
-        41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 64, 64, 64, 64, 64,
-        64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64,
-        64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64,
-        64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64,
-        64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64,
-        64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64,
-        64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64,
-        64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64,
-        64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64
-};
-
-static void Base64Decode(char *bufplain, const char *bufcoded) {
-        register const unsigned char *bufin;
-        register unsigned char *bufout;
-        register int nprbytes;
-        
-        bufin = (const unsigned char *) bufcoded;
-        while (pr2six[*(bufin++)] <= 63);
-        nprbytes = (bufin - (const unsigned char *) bufcoded) - 1;
-        
-        bufout = (unsigned char *) bufplain;
-        bufin = (const unsigned char *) bufcoded;
-        
-        while (nprbytes > 4) {
-                *(bufout++) = (unsigned char) (pr2six[*bufin] << 2 | pr2six[bufin[1]] >> 4);
-                *(bufout++) = (unsigned char) (pr2six[bufin[1]] << 4 | pr2six[bufin[2]] >> 2);
-                *(bufout++) = (unsigned char) (pr2six[bufin[2]] << 6 | pr2six[bufin[3]]);
-                bufin += 4;
-                nprbytes -= 4;
-        }
-        
-        if (nprbytes > 1)
-                *(bufout++) = (unsigned char) (pr2six[*bufin] << 2 | pr2six[bufin[1]] >> 4);
-        if (nprbytes > 2)
-                *(bufout++) = (unsigned char) (pr2six[bufin[1]] << 4 | pr2six[bufin[2]] >> 2);
-        if (nprbytes > 3)
-                *(bufout++) = (unsigned char) (pr2six[bufin[2]] << 6 | pr2six[bufin[3]]);
-        
-        *(bufout++) = '\0';
-}
-
-static int getExpireDays(char * pToken)
+static int setToken(TsMuxUploader* _PTsMuxUploader, char *_pToken, int _nTokenLen)
 {
-        char * pPolicy = strchr(pToken, ':');
-        if (pPolicy == NULL) {
-                return TK_ARG_ERROR;
-        }
-        pPolicy++;
-        pPolicy = strchr(pPolicy, ':');
-        if (pPolicy == NULL) {
-                return TK_ARG_ERROR;
-        }
-        
-        pPolicy++; //jump :
-        int len = (strlen(pPolicy) + 2) * 3 / 4 + 1;
-        char *pPlain = malloc(len);
-        Base64Decode(pPlain, pPolicy);
-        pPlain[len - 1] = 0;
-        
-        char *pExpireStart = strstr(pPlain, "\"deleteAfterDays\"");
-        if (pExpireStart == NULL) {
-                free(pPlain);
-                return 0;
-        }
-        pExpireStart += strlen("\"deleteAfterDays\"");
-        
-        char days[10] = {0};
-        int nStartFlag = 0;
-        int nDaysLen = 0;
-        char *pDaysStrat = NULL;
-        while(1) {
-                if (*pExpireStart >= 0x30 && *pExpireStart <= 0x39) {
-                        if (nStartFlag == 0) {
-                                pDaysStrat = pExpireStart;
-                                nStartFlag = 1;
-                        }
-                        nDaysLen++;
-                }else {
-                        if (nStartFlag)
-                                break;
+        FFTsMuxUploader * pFFTsMuxUploader = (FFTsMuxUploader *)_PTsMuxUploader;
+        if (pFFTsMuxUploader->token_.pToken_ == NULL) {
+                pFFTsMuxUploader->token_.pToken_ = malloc(_nTokenLen + 1);
+                if (pFFTsMuxUploader->token_.pToken_  == NULL) {
+                        return TK_NO_MEMORY;
                 }
-                pExpireStart++;
+        }else {
+                if (pFFTsMuxUploader->token_.pPrevToken_ != NULL) {
+                        free(pFFTsMuxUploader->token_.pPrevToken_);
+                }
+                pFFTsMuxUploader->token_.pPrevToken_ = pFFTsMuxUploader->token_.pToken_;
+                pFFTsMuxUploader->token_.nPrevTokenLen_ = pFFTsMuxUploader->token_.nTokenLen_;
+                
+                pFFTsMuxUploader->token_.pToken_ = malloc(_nTokenLen + 1);
+                if (pFFTsMuxUploader->token_.pToken_  == NULL) {
+                        return TK_NO_MEMORY;
+                }
         }
-        memcpy(days, pDaysStrat, nDaysLen);
-        free(pPlain);
-        return atoi(days);
+        memcpy(pFFTsMuxUploader->token_.pToken_, _pToken, _nTokenLen);
+        pFFTsMuxUploader->token_.nTokenLen_ = _nTokenLen;
+        pFFTsMuxUploader->token_.pToken_[_nTokenLen] = 0;
+        
+        pFFTsMuxUploader->uploadArg.pToken_ = _pToken;
+        return 0;
 }
 
-static void setToken(TsMuxUploader* _PTsMuxUploader, char *_pToken)
+static void upadateUploadArg(void *_pOpaque, void* pArg, int64_t nNow)
 {
-        FFTsMuxUploader * pFFTsMuxUploader = (FFTsMuxUploader *)_PTsMuxUploader;
-        pFFTsMuxUploader->deleteAfterDays_ = getExpireDays(_pToken);
-        pFFTsMuxUploader->pToken_ = _pToken;
+        FFTsMuxUploader *pFFTsMuxUploader = (FFTsMuxUploader*)_pOpaque;
+        UploadArg *_pUploadArg = (UploadArg *)pArg;
+        if (pFFTsMuxUploader->uploadArg.nSegmentId_ == 0) {
+                pFFTsMuxUploader->uploadArg.nLastUploadTsTime_ = _pUploadArg->nLastUploadTsTime_;
+                pFFTsMuxUploader->uploadArg.nSegmentId_ = _pUploadArg->nSegmentId_;
+                return;
+        }
+        int64_t nDiff = pFFTsMuxUploader->nNewSegmentInterval * 1000000000LL;
+        if (nNow - pFFTsMuxUploader->uploadArg.nLastUploadTsTime_ >= nDiff) {
+                pFFTsMuxUploader->uploadArg.nSegmentId_ = nNow;
+                _pUploadArg->nSegmentId_ = nNow;
+        }
+        pFFTsMuxUploader->uploadArg.nLastUploadTsTime_ = _pUploadArg->nLastUploadTsTime_;
+        return;
 }
 
-static void setAccessKey(TsMuxUploader* _PTsMuxUploader, char *_pAk, int _nAkLen)
+static void setUploaderBufferSize(TsMuxUploader* _pTsMuxUploader, int nBufferSize)
 {
-        FFTsMuxUploader * pFFTsMuxUploader = (FFTsMuxUploader *)_PTsMuxUploader;
-        assert(sizeof(pFFTsMuxUploader->ak_) - 1 > _nAkLen);
-        memcpy(pFFTsMuxUploader->ak_, _pAk, _nAkLen);
+        if (nBufferSize < 256) {
+                logwarn("setUploaderBufferSize is to small:%d. ge 256 required", nBufferSize);
+                return;
+        }
+        FFTsMuxUploader *pFFTsMuxUploader = (FFTsMuxUploader*)_pTsMuxUploader;
+        pFFTsMuxUploader->nUploadBufferSize = nBufferSize * 1024;
 }
 
-static void setSecretKey(TsMuxUploader* _PTsMuxUploader, char *_pSk, int _nSkLen)
+static void setNewSegmentInterval(TsMuxUploader* _pTsMuxUploader, int nInterval)
 {
-        FFTsMuxUploader * pFFTsMuxUploader = (FFTsMuxUploader *)_PTsMuxUploader;
-        assert(sizeof(pFFTsMuxUploader->sk_) - 1 > _nSkLen);
-        memcpy(pFFTsMuxUploader->sk_, _pSk, _nSkLen);
+        if (nInterval < 15) {
+                logwarn("setNewSegmentInterval is to small:%d. ge 15 required", nInterval);
+                return;
+        }
+        FFTsMuxUploader *pFFTsMuxUploader = (FFTsMuxUploader*)_pTsMuxUploader;
+        pFFTsMuxUploader->nNewSegmentInterval = nInterval;
 }
 
-static void setBucket(TsMuxUploader* _PTsMuxUploader, char *_pBucketName, int _nBucketNameLen)
-{
-        FFTsMuxUploader * pFFTsMuxUploader = (FFTsMuxUploader *)_PTsMuxUploader;
-        assert(sizeof(pFFTsMuxUploader->bucketName_) - 1 > _nBucketNameLen);
-        memcpy(pFFTsMuxUploader->bucketName_, _pBucketName, _nBucketNameLen);
-}
-
-static void setCallbackUrl(TsMuxUploader* _PTsMuxUploader, char *_pCallbackUrl, int _nCallbackUrlLen)
-{
-        FFTsMuxUploader * pFFTsMuxUploader = (FFTsMuxUploader *)_PTsMuxUploader;
-        assert(sizeof(pFFTsMuxUploader->callback_) - 1 > _nCallbackUrlLen);
-        memcpy(pFFTsMuxUploader->callback_, _pCallbackUrl, _nCallbackUrlLen);
-}
-
-static void setDeleteAfterDays(TsMuxUploader* _PTsMuxUploader, int nDays)
-{
-        FFTsMuxUploader * pFFTsMuxUploader = (FFTsMuxUploader *)_PTsMuxUploader;
-        pFFTsMuxUploader->deleteAfterDays_ = nDays;
-}
-
-int NewTsMuxUploader(TsMuxUploader **_pTsMuxUploader, AvArg *_pAvArg)
+int NewTsMuxUploader(TsMuxUploader **_pTsMuxUploader, AvArg *_pAvArg, char *_pDeviceId, int _nDeviceIdLen,
+                     char *_pToken, int _nTokenLen)
 {
         FFTsMuxUploader *pFFTsMuxUploader = (FFTsMuxUploader*)malloc(sizeof(FFTsMuxUploader));
         if (pFFTsMuxUploader == NULL) {
                 return TK_NO_MEMORY;
         }
         memset(pFFTsMuxUploader, 0, sizeof(FFTsMuxUploader));
-        pFFTsMuxUploader->nLastUploadVideoTimestamp = -1;
         
         int ret = 0;
+        ret = setToken((TsMuxUploader *)pFFTsMuxUploader, _pToken, _nTokenLen);
+        if (ret != 0) {
+                return ret;
+        }
+
+        if (_nDeviceIdLen >= sizeof(pFFTsMuxUploader->deviceId_)) {
+                free(pFFTsMuxUploader);
+                logerror("device max support lenght is 64");
+                return TK_ARG_TOO_LONG;
+        }
+        memcpy(pFFTsMuxUploader->deviceId_, _pDeviceId, _nDeviceIdLen);
+        pFFTsMuxUploader->uploadArg.pDeviceId_ = pFFTsMuxUploader->deviceId_;
+        
+        pFFTsMuxUploader->uploadArg.pUploadArgKeeper_ = pFFTsMuxUploader;
+        pFFTsMuxUploader->uploadArg.UploadArgUpadate = upadateUploadArg;
+        
+        pFFTsMuxUploader->nNewSegmentInterval = 30;
+        
+        pFFTsMuxUploader->nLastUploadVideoTimestamp = -1;
+        
         ret = pthread_mutex_init(&pFFTsMuxUploader->muxUploaderMutex_, NULL);
         if (ret != 0){
                 free(pFFTsMuxUploader);
@@ -743,18 +714,12 @@ int NewTsMuxUploader(TsMuxUploader **_pTsMuxUploader, AvArg *_pAvArg)
         }
         
         pFFTsMuxUploader->tsMuxUploader_.SetToken = setToken;
-        pFFTsMuxUploader->tsMuxUploader_.SetSecretKey = setSecretKey;
-        pFFTsMuxUploader->tsMuxUploader_.SetAccessKey = setAccessKey;
-        pFFTsMuxUploader->tsMuxUploader_.SetBucket = setBucket;
-        pFFTsMuxUploader->tsMuxUploader_.SetCallbackUrl = setCallbackUrl;
-        pFFTsMuxUploader->tsMuxUploader_.SetDeleteAfterDays = setDeleteAfterDays;
         pFFTsMuxUploader->tsMuxUploader_.PushAudio = PushAudio;
         pFFTsMuxUploader->tsMuxUploader_.PushVideo = PushVideo;
+        pFFTsMuxUploader->tsMuxUploader_.SetUploaderBufferSize = setUploaderBufferSize;
+        pFFTsMuxUploader->tsMuxUploader_.SetNewSegmentInterval = setNewSegmentInterval;
         
-        pFFTsMuxUploader->avArg.nAudioFormat = _pAvArg->nAudioFormat;
-        pFFTsMuxUploader->avArg.nChannels = _pAvArg->nChannels;
-        pFFTsMuxUploader->avArg.nSamplerate = _pAvArg->nSamplerate;
-        pFFTsMuxUploader->avArg.nVideoFormat = _pAvArg->nVideoFormat;
+        pFFTsMuxUploader->avArg = *_pAvArg;
         
         *_pTsMuxUploader = (TsMuxUploader *)pFFTsMuxUploader;
         
@@ -767,31 +732,13 @@ int TsMuxUploaderStart(TsMuxUploader *_pTsMuxUploader)
         
         assert(pFFTsMuxUploader->pTsMuxCtx == NULL);
         
-        int ret = newTsMuxContext(&pFFTsMuxUploader->pTsMuxCtx, &pFFTsMuxUploader->avArg);
+        int nBufsize = getBufferSize(pFFTsMuxUploader);
+        int ret = newTsMuxContext(&pFFTsMuxUploader->pTsMuxCtx, &pFFTsMuxUploader->avArg, &pFFTsMuxUploader->uploadArg, nBufsize);
         if (ret != 0) {
                 free(pFFTsMuxUploader);
                 return ret;
         }
-        if (pFFTsMuxUploader->pToken_ == NULL || pFFTsMuxUploader->pToken_[0] == 0) {
-                pFFTsMuxUploader->pTsMuxCtx->pTsUploader_->SetAccessKey(pFFTsMuxUploader->pTsMuxCtx->pTsUploader_,
-                                                                        pFFTsMuxUploader->ak_, strlen(pFFTsMuxUploader->ak_));
-                pFFTsMuxUploader->pTsMuxCtx->pTsUploader_->SetSecretKey(pFFTsMuxUploader->pTsMuxCtx->pTsUploader_,
-                                                                        pFFTsMuxUploader->sk_, strlen(pFFTsMuxUploader->sk_));
-                pFFTsMuxUploader->pTsMuxCtx->pTsUploader_->SetBucket(pFFTsMuxUploader->pTsMuxCtx->pTsUploader_,
-                                                                     pFFTsMuxUploader->bucketName_, strlen(pFFTsMuxUploader->bucketName_));
-                pFFTsMuxUploader->pTsMuxCtx->pTsUploader_->SetCallbackUrl(pFFTsMuxUploader->pTsMuxCtx->pTsUploader_,
-                                                                          pFFTsMuxUploader->callback_, strlen(pFFTsMuxUploader->callback_));
-        } else {
-                pFFTsMuxUploader->pTsMuxCtx->pTsUploader_->SetToken(pFFTsMuxUploader->pTsMuxCtx->pTsUploader_, pFFTsMuxUploader->pToken_);
-        }
-        pFFTsMuxUploader->pTsMuxCtx->pTsUploader_->SetDeleteAfterDays(pFFTsMuxUploader->pTsMuxCtx->pTsUploader_,
-                                                                      pFFTsMuxUploader->deleteAfterDays_);
 
-        if (pFFTsMuxUploader->nSegmentId == 0) {
-                pFFTsMuxUploader->nSegmentId = (int64_t)time(NULL);
-        }
-        pFFTsMuxUploader->pTsMuxCtx->pTsUploader_->SetSegmentId(
-                                                                pFFTsMuxUploader->pTsMuxCtx->pTsUploader_, pFFTsMuxUploader->nSegmentId );
         pFFTsMuxUploader->pTsMuxCtx->pTsUploader_->UploadStart(pFFTsMuxUploader->pTsMuxCtx->pTsUploader_);
         return 0;
 }
@@ -800,22 +747,10 @@ void DestroyTsMuxUploader(TsMuxUploader **_pTsMuxUploader)
 {
         FFTsMuxUploader *pFFTsMuxUploader = (FFTsMuxUploader *)(*_pTsMuxUploader);
         
+        if (pFFTsMuxUploader->pTsMuxCtx) {
+                pFFTsMuxUploader->pTsMuxCtx->pTsMuxUploader = (TsMuxUploader*)pFFTsMuxUploader;
+        }
         pushRecycle(pFFTsMuxUploader);
-        if (pFFTsMuxUploader) {
-                if (pFFTsMuxUploader->pAACBuf) {
-                        free(pFFTsMuxUploader->pAACBuf);
-                }
-                free(pFFTsMuxUploader);
-        }
+        *_pTsMuxUploader = NULL;
         return;
-}
-
-void SetUploadBufferSize(int nSize)
-{
-        if (nSize < 256) {
-                logwarn("set queue buffer is too small(%d). need great equal than 256k", nSize);
-                return;
-        }
-        loginfo("set queue buffer to:%dk", nSize);
-        gnQBufsize = nSize * 1024;
 }

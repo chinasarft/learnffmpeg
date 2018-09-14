@@ -15,15 +15,13 @@ typedef struct _TsMuxUploader TsMuxUploader;
 typedef struct _TsMuxUploader{
         int(*PushVideo)(TsMuxUploader *pTsMuxUploader, char * pData, int nDataLen, int64_t nTimestamp, int nIsKeyFrame, int nIsSegStart);
         int(*PushAudio)(TsMuxUploader *pTsMuxUploader, char * pData, int nDataLen, int64_t nTimestamp);
-        void (*SetToken)(TsMuxUploader*, char *);
-        void (*SetAccessKey)(TsMuxUploader* pTsMuxUploader, char *pAk, int nAkLen);
-        void (*SetSecretKey)(TsMuxUploader*pTsMuxUploader, char * pSk, int nSkLe);
-        void (*SetBucket)(TsMuxUploader*pTsMuxUploader, char * pBucketName, int nBucketNameLen);
-        void (*SetCallbackUrl)(TsMuxUploader*pTsMuxUploader, char * pCallbackUrl, int nCallbackUrlLen);
-        void (*SetDeleteAfterDays)(TsMuxUploader*pTsMuxUploader, int nAfterDays);
+        int (*SetToken)(TsMuxUploader*, char *, int);
+        void (*SetUploaderBufferSize)(TsMuxUploader*, int);
+        void (*SetNewSegmentInterval)(TsMuxUploader*, int);
 }TsMuxUploader;
 
-int NewTsMuxUploader(TsMuxUploader **pTsMuxUploader, AvArg *pAvArg);
+int NewTsMuxUploader(TsMuxUploader **pTsMuxUploader, AvArg *pAvArg, char *pDeviceId, int nDeviceIdLen,
+                     char *pToken, int nTokenLen);
 int TsMuxUploaderStart(TsMuxUploader *pTsMuxUploader);
 void DestroyTsMuxUploader(TsMuxUploader **pTsMuxUploader);
 #endif

@@ -6,7 +6,7 @@
 #include <stdint.h>
 #endif
 
-enum CircleQueuePolicy{
+typedef enum CircleQueuePolicy{
         TSQ_FIX_LENGTH,
         TSQ_VAR_LENGTH
 };

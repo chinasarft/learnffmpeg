@@ -5,12 +5,26 @@
 #include "log.h"
 #include "base.h"
 
-int InitUploader(char *pDeviceId, char * pToken, AvArg *pAvArg);
-int UpdateToken(char * pToken);
-void SetUploadBufferSize(int nSize);
-void SetNewSegmentInterval(int nIntervalSecond);
-int PushVideo(char * pData, int nDataLen, int64_t nTimestamp, int nIsKeyFrame, int nIsSegStart);
-int PushAudio(char * pData, int nDataLen, int64_t nTimestamp);
+#define DEBUG_MODE
+
+typedef struct {
+        char  *pToken_;
+        int   nTokenLen_;
+        char  *pDeviceId_;
+        int   nDeviceIdLen_;
+        int   nUploaderBufferSize;
+        int   nNewSegmentInterval;
+}UserUploadArg;
+
+int InitUploader();
+
+int CreateAndStartAVUploader(TsMuxUploader **pTsMuxUploader, AvArg *pAvArg, UserUploadArg *pUserUploadArg);
+int UpdateToken(TsMuxUploader *pTsMuxUploader, char * pToken, int nTokenLen);
+void SetUploadBufferSize(TsMuxUploader *pTsMuxUploader, int nSize);
+void SetNewSegmentInterval(TsMuxUploader *pTsMuxUploader, int nIntervalSecond);
+int PushVideo(TsMuxUploader *pTsMuxUploader, char * pData, int nDataLen, int64_t nTimestamp, int nIsKeyFrame, int nIsSegStart);
+int PushAudio(TsMuxUploader *pTsMuxUploader, char * pData, int nDataLen, int64_t nTimestamp);
+void DestroyAVUploader(TsMuxUploader **pTsMuxUploader);
 void UninitUploader();
 
 

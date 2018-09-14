@@ -8,18 +8,12 @@
 #include <time.h>
 #include <curl/curl.h>
 #ifdef __ARM
-#include "socket_logging.h"
+#include "./demo/socket_logging.h"
 #endif
 
 size_t getDataCallback(void* buffer, size_t size, size_t n, void* rptr);
 
 #define TS_DIVIDE_LEN 4096
-//#define UPLOAD_SEG_INFO
-
-static char gDeviceId[64];
-static int64_t nSegmentId;
-static int64_t nLastUploadTsTime;
-static int64_t nNewSegmentInterval = 30;
 
 enum WaitFirstFlag {
         WF_INIT,
@@ -28,7 +22,6 @@ enum WaitFirstFlag {
         WF_QUIT,
 };
 
-static int gnCount = 1;
 typedef struct _KodoUploader{
         TsUploader uploader;
 #ifdef TK_STREAM_UPLOAD
@@ -40,13 +33,9 @@ typedef struct _KodoUploader{
 #endif
         pthread_t workerId_;
         int isThreadStarted_;
-        char *pToken_;
-        char ak_[64];
-        char sk_[64];
-        char bucketName_[256];
-        int deleteAfterDays_;
-        char callback_[512];
-        int64_t nSegmentId;
+        
+        UploadArg uploadArg;
+
         int64_t nFirstFrameTimestamp;
         int64_t nLastFrameTimestamp;
         UploadState state;
@@ -56,7 +45,6 @@ typedef struct _KodoUploader{
         int64_t nUlnowRecTime;
         int nLowSpeedCnt;
         int nIsFinished;
-	int64_t nCount;
         
         pthread_mutex_t waitFirstMutex_;
         enum WaitFirstFlag nWaitFirstMutexLocked_;
@@ -85,12 +73,12 @@ int timeoutCallback(void *clientp, curl_off_t dltotal, curl_off_t dlnow, curl_of
         
         int nDiff = (int)((nNow - pUploader->nUlnowRecTime) / 1000000000);
         if (nDiff > 0) {
-                //printf("(%d)%d,==========dltotal:%lld dlnow:%lld ultotal:%lld ulnow-reculnow=%lld, now - lastrectime=%lld\n",
-                //       pUploader->nCount, pUploader->nLowSpeedCnt, dltotal, dlnow, ultotal, ulnow - pUploader->nLastUlnow, (nNow - pUploader->nUlnowRecTime)/1000000);
+                //printf("%d,==========dltotal:%lld dlnow:%lld ultotal:%lld ulnow-reculnow=%lld, now - lastrectime=%lld\n",
+                //       pUploader->nLowSpeedCnt, dltotal, dlnow, ultotal, ulnow - pUploader->nLastUlnow, (nNow - pUploader->nUlnowRecTime)/1000000);
                 if ((ulnow - pUploader->nLastUlnow) / nDiff < 1024) { //} && !pUploader->nIsFinished) {
                         pUploader->nLowSpeedCnt += nDiff;
-                        if (pUploader->nLowSpeedCnt >= 3) {
-                                logerror("accumulate upload timeout:%d", pUploader->nLowSpeedCnt); 
+                        if (pUploader->nLowSpeedCnt > 3) {
+                                logerror("accumulate upload timeout:%d %d", pUploader->nLowSpeedCnt, nDiff);
                                 return -1;
                         }
                 }
@@ -98,10 +86,11 @@ int timeoutCallback(void *clientp, curl_off_t dltotal, curl_off_t dlnow, curl_of
                         logerror("upload timeout directly:%d", nDiff); 
                         return -1;
                 } else if (nDiff >= 5) {
-                        if (pUploader->nLowSpeedCnt >= 1) {
-                                logerror("half accumulate upload timeout:%d", pUploader->nLowSpeedCnt); 
+                        if (pUploader->nLowSpeedCnt > 1) {
+                                logerror("half accumulate upload timeout:%d %d", pUploader->nLowSpeedCnt, nDiff);
                                 return -1;
                         }
+                        logwarn("accumulate2 upload timeout:%d %d", pUploader->nLowSpeedCnt, nDiff);
                         pUploader->nLowSpeedCnt = 2;
 
                 }
@@ -109,52 +98,6 @@ int timeoutCallback(void *clientp, curl_off_t dltotal, curl_off_t dlnow, curl_of
                 pUploader->nUlnowRecTime = nNow;
         }
         return 0;
-}
-
-static void setSegmentId(TsUploader* _pUploader, int64_t _nId)
-{
-        KodoUploader * pKodoUploader = (KodoUploader *)_pUploader;
-        pKodoUploader->nSegmentId = _nId;
-}
-
-static void setAccessKey(TsUploader* _pUploader, char *_pAk, int _nAkLen)
-{
-        KodoUploader * pKodoUploader = (KodoUploader *)_pUploader;
-        assert(sizeof(pKodoUploader->ak_) - 1 > _nAkLen);
-        memcpy(pKodoUploader->ak_, _pAk, _nAkLen);
-}
-
-static void setSecretKey(TsUploader* _pUploader, char *_pSk, int _nSkLen)
-{
-        KodoUploader * pKodoUploader = (KodoUploader *)_pUploader;
-        assert(sizeof(pKodoUploader->sk_) - 1 > _nSkLen);
-        memcpy(pKodoUploader->sk_, _pSk, _nSkLen);
-}
-
-static void setBucket(TsUploader* _pUploader, char *_pBucketName, int _nBucketNameLen)
-{
-        KodoUploader * pKodoUploader = (KodoUploader *)_pUploader;
-        assert(sizeof(pKodoUploader->bucketName_) - 1 > _nBucketNameLen);
-        memcpy(pKodoUploader->bucketName_, _pBucketName, _nBucketNameLen);
-}
-
-static void setCallbackUrl(TsUploader* _pUploader, char *_pCallbackUrl, int _nCallbackUrlLen)
-{
-        KodoUploader * pKodoUploader = (KodoUploader *)_pUploader;
-        assert(sizeof(pKodoUploader->callback_) - 1 > _nCallbackUrlLen);
-        memcpy(pKodoUploader->callback_, _pCallbackUrl, _nCallbackUrlLen);
-}
-
-static void setDeleteAfterDays(TsUploader* _pUploader, int nDays)
-{
-        KodoUploader * pKodoUploader = (KodoUploader *)_pUploader;
-        pKodoUploader->deleteAfterDays_ = nDays;
-}
-
-static void setToken(TsUploader* _pUploader, char *_pToken)
-{
-        KodoUploader * pKodoUploader = (KodoUploader *)_pUploader;
-        pKodoUploader->pToken_ = _pToken;
 }
 
 static char * getErrorMsg(const char *_pJson, char *_pBuf, int _nBufLen)
@@ -183,6 +126,102 @@ static char * getErrorMsg(const char *_pJson, char *_pBuf, int _nBufLen)
         return _pBuf;
 }
 
+static const unsigned char pr2six[256] = {
+        64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64,
+        64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64,
+        64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 62, 64, 63,
+        52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 64, 64, 64, 64, 64, 64,
+        64,  0,  1,  2,  3,  4,  5,  6,  7,  8,  9, 10, 11, 12, 13, 14,
+        15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 64, 64, 64, 64, 63,
+        64, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40,
+        41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 64, 64, 64, 64, 64,
+        64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64,
+        64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64,
+        64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64,
+        64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64,
+        64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64,
+        64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64,
+        64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64,
+        64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64
+};
+
+static void Base64Decode(char *bufplain, const char *bufcoded) {
+        register const unsigned char *bufin;
+        register unsigned char *bufout;
+        register int nprbytes;
+        
+        bufin = (const unsigned char *) bufcoded;
+        while (pr2six[*(bufin++)] <= 63);
+        nprbytes = (bufin - (const unsigned char *) bufcoded) - 1;
+        
+        bufout = (unsigned char *) bufplain;
+        bufin = (const unsigned char *) bufcoded;
+        
+        while (nprbytes > 4) {
+                *(bufout++) = (unsigned char) (pr2six[*bufin] << 2 | pr2six[bufin[1]] >> 4);
+                *(bufout++) = (unsigned char) (pr2six[bufin[1]] << 4 | pr2six[bufin[2]] >> 2);
+                *(bufout++) = (unsigned char) (pr2six[bufin[2]] << 6 | pr2six[bufin[3]]);
+                bufin += 4;
+                nprbytes -= 4;
+        }
+        
+        if (nprbytes > 1)
+                *(bufout++) = (unsigned char) (pr2six[*bufin] << 2 | pr2six[bufin[1]] >> 4);
+        if (nprbytes > 2)
+                *(bufout++) = (unsigned char) (pr2six[bufin[1]] << 4 | pr2six[bufin[2]] >> 2);
+        if (nprbytes > 3)
+                *(bufout++) = (unsigned char) (pr2six[bufin[2]] << 6 | pr2six[bufin[3]]);
+        
+        *(bufout++) = '\0';
+}
+
+static int getExpireDays(char * pToken)
+{
+        char * pPolicy = strchr(pToken, ':');
+        if (pPolicy == NULL) {
+                return TK_ARG_ERROR;
+        }
+        pPolicy++;
+        pPolicy = strchr(pPolicy, ':');
+        if (pPolicy == NULL) {
+                return TK_ARG_ERROR;
+        }
+        
+        pPolicy++; //jump :
+        int len = (strlen(pPolicy) + 2) * 3 / 4 + 1;
+        char *pPlain = malloc(len);
+        Base64Decode(pPlain, pPolicy);
+        pPlain[len - 1] = 0;
+        
+        char *pExpireStart = strstr(pPlain, "\"deleteAfterDays\"");
+        if (pExpireStart == NULL) {
+                free(pPlain);
+                return 0;
+        }
+        pExpireStart += strlen("\"deleteAfterDays\"");
+        
+        char days[10] = {0};
+        int nStartFlag = 0;
+        int nDaysLen = 0;
+        char *pDaysStrat = NULL;
+        while(1) {
+                if (*pExpireStart >= 0x30 && *pExpireStart <= 0x39) {
+                        if (nStartFlag == 0) {
+                                pDaysStrat = pExpireStart;
+                                nStartFlag = 1;
+                        }
+                        nDaysLen++;
+                }else {
+                        if (nStartFlag)
+                                break;
+                }
+                pExpireStart++;
+        }
+        memcpy(days, pDaysStrat, nDaysLen);
+        free(pPlain);
+        return atoi(days);
+}
+
 #ifdef MULTI_SEG_TEST
 static int newSegCount = 0;
 #endif
@@ -193,31 +232,10 @@ static void * streamUpload(void *_pOpaque)
         char *uptoken = NULL;
         Qiniu_Client client;
         int canFreeToken = 0;
-#ifndef DISABLE_OPENSSL
-        if (pUploader->pToken_ == NULL || pUploader->pToken_[0] == 0) {
-                Qiniu_Mac mac;
-                mac.accessKey = pUploader->ak_;
-                mac.secretKey = pUploader->sk_;
-                
-                Qiniu_RS_PutPolicy putPolicy;
-                Qiniu_Zero(putPolicy);
-                putPolicy.scope = pUploader->bucketName_;
-                putPolicy.deleteAfterDays = pUploader->deleteAfterDays_;
-                putPolicy.callbackUrl = pUploader->callback_;
-                uptoken = Qiniu_RS_PutPolicy_Token(&putPolicy, &mac);
-                canFreeToken = 1;
-                //init
-                Qiniu_Client_InitMacAuth(&client, 1024, &mac);
-        } else {
-#else
-                uptoken = pUploader->pToken_;
-                Qiniu_Client_InitNoAuth(&client, 1024);
-#endif
-        
-#ifndef DISABLE_OPENSSL
-        }
-#endif
-        
+
+        uptoken = pUploader->uploadArg.pToken_;
+        Qiniu_Client_InitNoAuth(&client, 1024);
+
         Qiniu_Io_PutRet putRet;
         Qiniu_Io_PutExtra putExtra;
         Qiniu_Zero(putExtra);
@@ -237,7 +255,7 @@ static void * streamUpload(void *_pOpaque)
         
         char key[128] = {0};
         
-        //todo wait for first packet
+        // wait for first packet
         if (pUploader->nWaitFirstMutexLocked_ == WF_LOCKED) {
                 pthread_mutex_lock(&pUploader->waitFirstMutex_);
                 pthread_mutex_unlock(&pUploader->waitFirstMutex_);
@@ -247,46 +265,23 @@ static void * streamUpload(void *_pOpaque)
         }
         logdebug("upload start");
         
-        //segmentid(time)
         int64_t curTime = GetCurrentNanosecond();
         // ts/uid/ua_id/yyyy/mm/dd/hh/mm/ss/mmm/fragment_start_ts/expiry.ts
-        time_t secs = curTime / 1000000000;
-#ifndef MULTI_SEG_TEST
-        if ((curTime - nLastUploadTsTime) > nNewSegmentInterval * 1000000000ll) {
-#else
-        if (newSegCount % 10 == 0) {
-                if (newSegCount == 0)
-                        newSegCount++;
-                else
-                        newSegCount = 0;
-#endif
-                nSegmentId = curTime;
-#ifdef UPLOAD_SEG_INFO
-                // seg/segid 目前在服务端生成seg文件
-                sprintf(key, "seg/%lld", gDeviceId, nSegmentId / 1000000);
-                Qiniu_Error segErr = Qiniu_Io_PutBuffer(&client, &putRet, uptoken, key, "", 0, NULL);
-                if (segErr.code != 200) {
-                        pUploader->state = TK_UPLOAD_FAIL;
-                        logerror("upload seg file %s:%s code:%d curl_error:%s kodo_error:%s", pUploader->bucketName_, key,
-                                 segErr.code, segErr.message,Qiniu_Buffer_CStr(&client.b));
-                        //debug_log(&client, error);
-                } else {
-                        pUploader->state = TK_UPLOAD_OK;
-                        logdebug("upload seg file %s: key:%s success", pUploader->bucketName_, key);
-                }
-#endif
-        }
-#ifdef MULTI_SEG_TEST
-        else {
-                newSegCount++;
-        }
-#endif
-        nLastUploadTsTime = curTime;
         
+        if (pUploader->uploadArg.nSegmentId_ == 0) {
+                pUploader->uploadArg.nSegmentId_ = curTime;
+        }
+        pUploader->uploadArg.nLastUploadTsTime_ = curTime;
+        if (pUploader->uploadArg.UploadArgUpadate) {
+                pUploader->uploadArg.UploadArgUpadate(pUploader->uploadArg.pUploadArgKeeper_, &pUploader->uploadArg, curTime);
+        }
+        uint64_t nSegmentId = pUploader->uploadArg.nSegmentId_;
+        
+        int nDeleteAfterDays_ = getExpireDays(uptoken);
         memset(key, 0, sizeof(key));
         //ts/uaid/startts/fragment_start_ts/expiry.ts
-        sprintf(key, "ts/%s/%lld/%lld/%d.ts", gDeviceId,
-                curTime / 1000000, nSegmentId / 1000000, pUploader->deleteAfterDays_);
+        sprintf(key, "ts/%s/%lld/%lld/%d.ts", pUploader->uploadArg.pDeviceId_,
+                curTime / 1000000, nSegmentId / 1000000, nDeleteAfterDays_);
 #ifdef TK_STREAM_UPLOAD
         client.xferinfoData = _pOpaque;
         client.xferinfoCb = timeoutCallback;
@@ -295,8 +290,9 @@ static void * streamUpload(void *_pOpaque)
         Qiniu_Error error = Qiniu_Io_PutBuffer(&client, &putRet, uptoken, key, (const char*)pUploader->pTsData,
                                                pUploader->nTsDataLen, &putExtra);
 #endif
+        
 #ifdef __ARM
-        report_status( error.code );// add by liyq to record ts upload status
+        report_status( error.code, key );// add by liyq to record ts upload status
 #endif
         if (error.code != 200) {
                 pUploader->state = TK_UPLOAD_FAIL;
@@ -323,7 +319,7 @@ static void * streamUpload(void *_pOpaque)
                 //debug_log(&client, error);
         } else {
                 pUploader->state = TK_UPLOAD_OK;
-                logdebug("upload file %s: size:(exp:%lld real:%lld) key:%s success", pUploader->bucketName_,
+                logdebug("upload file size:(exp:%lld real:%lld) key:%s success",
                           pUploader->getDataBytes, pUploader->nLastUlnow, key);
         }
 END:
@@ -492,8 +488,8 @@ UploadState getUploaderState(TsUploader *_pTsUploader)
         KodoUploader * pKodoUploader = (KodoUploader *)_pTsUploader;
         return pKodoUploader->state;
 }
-
-int NewUploader(TsUploader ** _pUploader, enum CircleQueuePolicy _policy, int _nMaxItemLen, int _nInitItemCount)
+        
+int NewUploader(TsUploader ** _pUploader, UploadArg *_pArg, enum CircleQueuePolicy _policy, int _nMaxItemLen, int _nInitItemCount)
 {
         KodoUploader * pKodoUploader = (KodoUploader *) malloc(sizeof(KodoUploader));
         if (pKodoUploader == NULL) {
@@ -501,6 +497,7 @@ int NewUploader(TsUploader ** _pUploader, enum CircleQueuePolicy _policy, int _n
         }
 
         memset(pKodoUploader, 0, sizeof(KodoUploader));
+        
         int ret = pthread_mutex_init(&pKodoUploader->waitFirstMutex_, NULL);
         if (ret != 0){
                 free(pKodoUploader);
@@ -519,12 +516,7 @@ int NewUploader(TsUploader ** _pUploader, enum CircleQueuePolicy _policy, int _n
 #endif
         pKodoUploader->nFirstFrameTimestamp = -1;
         pKodoUploader->nLastFrameTimestamp = -1;
-        pKodoUploader->uploader.SetToken = setToken;
-        pKodoUploader->uploader.SetAccessKey = setAccessKey;
-        pKodoUploader->uploader.SetSecretKey = setSecretKey;
-        pKodoUploader->uploader.SetBucket = setBucket;
-        pKodoUploader->uploader.SetCallbackUrl = setCallbackUrl;
-        pKodoUploader->uploader.SetDeleteAfterDays = setDeleteAfterDays;
+        pKodoUploader->uploadArg = *_pArg;
 #ifdef TK_STREAM_UPLOAD
         pKodoUploader->uploader.UploadStart = streamUploadStart;
         pKodoUploader->uploader.UploadStop = streamUploadStop;
@@ -535,10 +527,8 @@ int NewUploader(TsUploader ** _pUploader, enum CircleQueuePolicy _policy, int _n
         pKodoUploader->uploader.Push = memPushData;
 #endif
         pKodoUploader->uploader.GetStatInfo = getStatInfo;
-        pKodoUploader->uploader.SetSegmentId = setSegmentId;
         pKodoUploader->uploader.RecordTimestamp = recordTimestamp;
         pKodoUploader->uploader.GetUploaderState = getUploaderState;
-	pKodoUploader->nCount = gnCount++;
         
         *_pUploader = (TsUploader*)pKodoUploader;
         
@@ -562,24 +552,4 @@ void DestroyUploader(TsUploader ** _pUploader)
         free(pKodoUploader);
         * _pUploader = NULL;
         return;
-}
-
-int SetDeviceId(char *_pDeviceId)
-{
-        int ret = 0;
-        ret = snprintf(gDeviceId, sizeof(gDeviceId), "%s", _pDeviceId);
-        assert(ret > 0);
-        if (ret == sizeof(gDeviceId)) {
-                logerror("deviceid:%s is too long", _pDeviceId);
-                return TK_ARG_ERROR;
-        }
-        
-        return 0;
-}
-
-void SetNewSegmentInterval(int nInterval)
-{
-        if (nInterval > 0) {
-                nNewSegmentInterval = nInterval;
-        }
 }

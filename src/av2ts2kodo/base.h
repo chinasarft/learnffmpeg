@@ -43,6 +43,7 @@ typedef struct _AvArg{
 #define TK_TIMEOUT         -2000
 #define TK_NO_PUSH         -2001
 #define TK_BUFFER_IS_SMALL -2003
+#define TK_ARG_TOO_LONG    -2004
 #define TK_ARG_ERROR       -2100
 #define TK_JSON_FORMAT     -2200
 #define TK_HTTP_TIME       -2300
