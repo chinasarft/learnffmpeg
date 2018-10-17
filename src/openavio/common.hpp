@@ -72,6 +72,9 @@ typedef int ssize_t;
 #define os_sleep_ns(ns) std::this_thread::sleep_for(std::chrono::nanoseconds(ns));
 #define os_sleep_ms(ms) std::this_thread::sleep_for(std::chrono::milliseconds(ms));
 
+#define os_getmonotonictime_ns() std::chrono::high_resolution_clock::steady_clock::now().time_since_epoch().count()
+#define os_getmonotonictime_ms() std::chrono::high_resolution_clock::steady_clock::now().time_since_epoch().count()/1000000
+
 #include "packet.hpp"
 #include "input.hpp"
 #include "media.hpp"

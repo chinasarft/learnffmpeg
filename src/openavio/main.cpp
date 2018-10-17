@@ -1,7 +1,7 @@
 #include "common.hpp"
 
 #define THIS_FILE "main.cpp"
-#define RTP_TEST
+
 void getFrameCallback(void * opaque, std::shared_ptr<MediaFrame>& _pFrame)
 {
     const char * name = nullptr;
@@ -11,12 +11,13 @@ void getFrameCallback(void * opaque, std::shared_ptr<MediaFrame>& _pFrame)
     else {
         name = "video";
     }
-    loginfo("{} framepts:{}", name, _pFrame->pts);
+    //loginfo("{} framepts:{}", name, _pFrame->pts);
+        fprintf(stderr, "%s framepts:%lld\n", name, _pFrame->pts);
 }
 
 int main(int argc, char **argv) {
 
-    logger_init_file_output("log.log");
+    logger_init_file_output("/tmp/log.log");
     logger_set_level_debug();
     //logger_set_level_info();
     fprintf(stderr, "level:%d\n", logger_get_level());
@@ -27,8 +28,8 @@ int main(int argc, char **argv) {
     //param.url_ = "E:\\Videos\\lzc67hd.mp4";
     //param.url_ = "rtmp://live.hkstv.hk.lxdns.com/live/hks";
     //param.url_ = "/Users/liuye/Documents/qml/iceplayer/b.mp4";
-    param.url_ = "/Users/liuye/Documents/qml/iceplayer/v.h264";
-        param.formatHint_ = "h264";
+        param.url_ = "/Users/liuye/Downloads/1517444052127-1517444059607.ts";//"/Users/liuye/Documents/qml/iceplayer/v.h264";
+        //param.formatHint_ = "h264";
     //param.url_ = "/Users/liuye/Documents/p2p/build/src/mysiprtp/Debug/hks.h264";
 #if 0
     param.url_ = "/Users/liuye/Documents/qml/iceplayer/a.mulaw";
@@ -42,7 +43,7 @@ int main(int argc, char **argv) {
         Input input(param);
         //input.just_for_test_heap();
         input.Start();
-        input.WaitStop();
+        //input.WaitStop();
         
 #else
         InputParam param1;
@@ -72,10 +73,12 @@ int main(int argc, char **argv) {
         input1.Start();
         input2.Start();
         
+        
         input1.WaitStop();
         input2.WaitStop();
 #endif
 
+        os_sleep_ms(1000*10000);
     logger_flush();
     fprintf(stderr, "level:%d\n", logger_get_level());
 }

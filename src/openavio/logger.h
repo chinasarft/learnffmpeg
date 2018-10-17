@@ -30,6 +30,7 @@ extern std::shared_ptr<spdlog::logger> spdlogger;
 #endif
 
 #define BOALOG_LEN 5
+#if 0
 static inline int loghex(char * buffer, char * data, int data_len)
 {
         int i, j = 0, buf_len, logline_len = 69 + 2 * BOALOG_LEN;
@@ -79,7 +80,7 @@ static inline int loghex(char * buffer, char * data, int data_len)
         //printf("return len:%d\n", buf_len);
         return buf_len;
 }
-
+#endif
 
 extern "C" void logger_init_file_output(const char * path);
 extern "C" void logger_set_level_trace();

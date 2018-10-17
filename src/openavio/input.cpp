@@ -83,6 +83,19 @@ int AvReceiver::initContext()
 #endif
 
 
+    AVDictionary * options = nullptr;
+    if (!param_->formatHint_.empty()) {
+        // fix delay of av_read_frame
+        av_dict_set(&options,"probesize","512",0);
+        av_dict_set(&options,"max_analyze_duration", "200",0);
+    }
+        
+    AVInputFormat * infmt = nullptr;
+    if (!param_->formatHint_.empty()) {
+        infmt = av_find_input_format(param_->formatHint_.c_str());
+        fprintf(stderr, "find %s AVInputFormat", param_->formatHint_.c_str());
+    }
+        
     int nStatus = 0;
     if (!param_->url_.empty()) {
         // open input stream
@@ -91,10 +104,7 @@ int AvReceiver::initContext()
 #else
         loginfo("input URL: {}", param_->url_.c_str());
 #endif
-        AVInputFormat * infmt = NULL;
-        if (!param_->formatHint_.empty())
-            infmt = av_find_input_format(param_->formatHint_.c_str());
-        nStatus = avformat_open_input(&pAvContext_, param_->url_.c_str(), infmt, nullptr);
+        nStatus = avformat_open_input(&pAvContext_, param_->url_.c_str(), infmt, &options);
     }
     else if (param_->feedDataCb_) {
         pAvContext_ = avformat_alloc_context();
@@ -102,12 +112,10 @@ int AvReceiver::initContext()
         pAvioCtx_ = avio_alloc_context(pAvioCtxBuffer, 4096, 0,
             param_->feedCbOpaqueArg_, param_->feedDataCb_, nullptr, nullptr);
         pAvContext_->pb = pAvioCtx_;
-        AVInputFormat * infmt = NULL;
-        if (!param_->formatHint_.empty())
-            infmt = av_find_input_format(param_->formatHint_.c_str());
 
-        nStatus = avformat_open_input(&pAvContext_, nullptr, infmt, nullptr);
+        nStatus = avformat_open_input(&pAvContext_, nullptr, infmt, &options);
     }
+    av_dict_free(&options);
 #if LOG_TRADITIONAL
         STAUS_CHECK(nStatus, -3, "could not open input stream: %s %s", param_->url_.c_str(), param_->formatHint_.c_str());
 #else
@@ -137,6 +145,9 @@ int AvReceiver::initContext()
     if (nStatus < 0) {
         logerror("could not get stream info");
         return -1;
+    }
+    for (int i = 0; i < pAvContext_->nb_streams; i++) {
+        av_dict_free(&opts[i]);
     }
 
     for (unsigned int i = 0; i < pAvContext_->nb_streams; i++) {
@@ -417,6 +428,29 @@ void Input::Start()
             // start receiver loop
             // 退出条件是receiverHook返回非0
             avReceiver_->Receive(receiverHook);
+                
+            while(audioFrameQueue_.size() > 0) {
+                std::shared_ptr<MediaFrame> frame = audioFrameQueue_.front();
+                int64_t nNowAudio = os_gettime_ns();
+                int nComposation = (audioComposationTime == -1 ? 0 : audioComposationTime);
+                int diff = outputFrame(frame, nNowAudio, prevAudioPts, startAudioPts, nComposation);
+                if (diff == 0) {
+                    audioFrameQueue_.pop();
+                } else {
+                    os_sleep_ms(5);
+                }
+            }
+            while(videoFrameQueue_.size() > 0) {
+                std::shared_ptr<MediaFrame> frame = videoFrameQueue_.front();;
+                int64_t nNowAudio = os_gettime_ns();
+                int nComposation = (videoComposationTime == -1 ? 0 : videoComposationTime);
+                int diff = outputFrame(frame, nNowAudio, prevVideoPts, startVideoPts, nComposation);
+                if (diff == 0) {
+                    videoFrameQueue_.pop();
+                } else {
+                    os_sleep_ms(5);
+                }
+            }
 
             stat_->Reset();
             if (bRestart_.load()) {
@@ -501,17 +535,21 @@ int Input::outputFrame(std::shared_ptr<MediaFrame>& _pFrame, int64_t nNow, int64
         int64_t nWallElapse = nNow - startSysTime;
         int64_t nFrameElapse = (_pFrame->pts  - _nStartFrameTime + _nComposation) * 1000000;
         int64_t nDiff = nFrameElapse - nWallElapse - 1000000;
+        if (nDiff > 1000000) {
+            return nDiff;
+        }
 #else
         int64_t nWallElapse = (nNow - startSysTime) / 1000000;
         int64_t nFrameElapse = _pFrame->pts  - _nStartFrameTime + _nComposation;
         int64_t nDiff = nFrameElapse - nWallElapse - 1;
+        if (nDiff > 0) {
+            return nDiff;
+        }
 #endif
         
         //logdebug("sleep, nDiff=%lld, frmaeElapse:%lld", nDiff/1000000, nFrameElapse);
 
-        if (nDiff > 0) {
-            return nDiff;
-        }
+        
         else {
             _nPrevTime = _pFrame->pts;
             param_.getFrameCb_(param_.userData_, _pFrame);
