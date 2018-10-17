@@ -1,7 +1,7 @@
 #include "adts.h"
 #include <math.h>
 
-void InitAdtsFixedHeader(ADTSFixheader *_pHeader) {
+void LinkInitAdtsFixedHeader(LinkADTSFixheader *_pHeader) {
     _pHeader->syncword                 = 0xFFF;
     _pHeader->id                       = 0;
     _pHeader->layer                    = 0;
@@ -14,7 +14,7 @@ void InitAdtsFixedHeader(ADTSFixheader *_pHeader) {
     _pHeader->home                     = 0;
 }
 
-void InitAdtsVariableHeader(ADTSVariableHeader *_pHeader, const int _nAacLenWithoutHeader) {
+void LinkInitAdtsVariableHeader(LinkADTSVariableHeader *_pHeader, const int _nAacLenWithoutHeader) {
     _pHeader->copyright_identification_bit       = 0;
     _pHeader->copyright_identification_start     = 0;
     _pHeader->aac_frame_length                   = _nAacLenWithoutHeader + 7;
@@ -22,7 +22,7 @@ void InitAdtsVariableHeader(ADTSVariableHeader *_pHeader, const int _nAacLenWith
     _pHeader->number_of_raw_data_blocks_in_frame = 0;
 }
 
-void ParseAdtsfixedHeader(const unsigned char *pData, ADTSFixheader *_pHeader) {
+void LinkParseAdtsfixedHeader(const unsigned char *pData, LinkADTSFixheader *_pHeader) {
     unsigned long long adts = 0;
     const unsigned char *p = pData;
     adts |= *p ++; adts <<= 8;
@@ -46,7 +46,7 @@ void ParseAdtsfixedHeader(const unsigned char *pData, ADTSFixheader *_pHeader) {
     _pHeader->home                     = (adts >> 28) & 0x01;
 }
 
-void ParseAdtsVariableHeader(const unsigned char *pData, ADTSVariableHeader *_pHeader) {
+void LinkParseAdtsVariableHeader(const unsigned char *pData, LinkADTSVariableHeader *_pHeader) {
     unsigned long long adts = 0;
     adts  = pData[0]; adts <<= 8;
     adts |= pData[1]; adts <<= 8;
@@ -63,7 +63,7 @@ void ParseAdtsVariableHeader(const unsigned char *pData, ADTSVariableHeader *_pH
     _pHeader->number_of_raw_data_blocks_in_frame = adts & 0x03;
 }
 
-void ConvertAdtsHeader2Int64(const ADTSFixheader *_pFixedHeader, const ADTSVariableHeader *_pVarHeader, uint64_t *_pHeader) {
+void LinkConvertAdtsHeader2Int64(const LinkADTSFixheader *_pFixedHeader, const LinkADTSVariableHeader *_pVarHeader, uint64_t *_pHeader) {
     uint64_t ret_value = 0;
     ret_value = _pFixedHeader->syncword;
     ret_value <<= 1;
@@ -99,9 +99,9 @@ void ConvertAdtsHeader2Int64(const ADTSFixheader *_pFixedHeader, const ADTSVaria
     *_pHeader = ret_value;
 }
 
-void ConvertAdtsHeader2Char(const ADTSFixheader *_pFixedHeader, const ADTSVariableHeader *_pVarHeader, unsigned char *pHeader) {
+void LinkConvertAdtsHeader2Char(const LinkADTSFixheader *_pFixedHeader, const LinkADTSVariableHeader *_pVarHeader, unsigned char *pHeader) {
     uint64_t value = 0;
-    ConvertAdtsHeader2Int64(_pFixedHeader, _pVarHeader, &value);
+    LinkConvertAdtsHeader2Int64(_pFixedHeader, _pVarHeader, &value);
     
     pHeader[0] = (value >> 48) & 0xff;
     pHeader[1] = (value >> 40) & 0xff;

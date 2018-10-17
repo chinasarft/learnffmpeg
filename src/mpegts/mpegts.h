@@ -1,52 +1,46 @@
-#ifndef __MPEG_TS__
-#define __MPEG_TS__
+#ifndef __LINK_MPEG_TS__
+#define __LINK_MPEG_TS__
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
 #include <assert.h>
+//#include "base.h"
 
 /* pids */
-#define PAT_PID                 0x0000
-#define SDT_PID                 0x0011
+#define LINK_PAT_PID                 0x0000
+#define LINK_SDT_PID                 0x0011
 //下面的pid不是标准，完全是因为简单化
-#define PMT_PID 0x1000
-#define VIDEO_PID 0x100
-#define AUDIO_PID 0x101
+#define LINK_PMT_PID 0x1000
+#define LINK_VIDEO_PID 0x100
+#define LINK_AUDIO_PID 0x101
 
 /* table ids */
-#define PAT_TID   0x00
-#define PMT_TID   0x02
-#define M4OD_TID  0x05
-#define SDT_TID   0x42
-
-typedef enum {
-        TK_VIDEO_H264 = 1,
-        TK_VIDEO_H265 = 2
-}TkVideoFormat;
-typedef enum {
-        TK_AUDIO_PCMU = 1,
-        TK_AUDIO_PCMA = 2,
-        TK_AUDIO_AAC = 3
-}TkAudioFormat;
-
-
-#define STREAM_TYPE_PRIVATE_SECTION 0x05
-#define STREAM_TYPE_PRIVATE_DATA    0x06
-#define STREAM_TYPE_AUDIO_AAC       0x0f
-#define STREAM_TYPE_VIDEO_H264      0x1b
-#define STREAM_TYPE_VIDEO_HEVC      0x24
+#define LINK_PAT_TID   0x00
+#define LINK_PMT_TID   0x02
+#define LINK_M4OD_TID  0x05
+#define LINK_SDT_TID   0x42
 
 //调整字段控制,。01仅含有效负载，10仅含调整字段，11含有调整字段和有效负载。为00的话解码器不进行处理。
-#define ADAPTATION_INGNORE 0x0
-#define ADAPTATION_JUST_PAYLOAD 0x1
-#define ADAPTATION_JUST_PADDING 0x2
-#define ADAPTATION_BOTH 0x3
+#define LINK_ADAPTATION_INGNORE 0x0
+#define LINK_ADAPTATION_JUST_PAYLOAD 0x1
+#define LINK_ADAPTATION_JUST_PADDING 0x2
+#define LINK_ADAPTATION_BOTH 0x3
 
+typedef enum {
+        LINK_VIDEO_H264 = 1,
+        LINK_VIDEO_H265 = 2
+}LinkVideoFormat;
 
-typedef int (*TsPacketCallback)(void *pOpaque, void* pTsData, int nTsDataLen);
+typedef enum {
+        LINK_AUDIO_PCMU = 1,
+        LINK_AUDIO_PCMA = 2,
+        LINK_AUDIO_AAC = 3
+}LinkAudioFormat;
 
-typedef struct PES PES;
-typedef struct PES{
+typedef int (*LinkTsPacketCallback)(void *pOpaque, void* pTsData, int nTsDataLen);
+
+typedef struct _LinkPES LinkPES;
+typedef struct _LinkPES{
         uint8_t *pESData;
         int nESDataLen;
         int nPos; //指向pESData
@@ -55,22 +49,22 @@ typedef struct PES{
         int64_t nPts;
         uint8_t nWithPcr;
         uint8_t nPrivate;
-        TkVideoFormat videoFormat;
+        LinkVideoFormat videoFormat;
         //设想是传入h264(或者音频)给pESData， 在封装ts时候每次应该封装多少长度的数据是应该知道的
         //也是尽量减少内存使用
-}PES;
+}LinkPES;
 
-void InitVideoPESWithPcr(PES *_pPes, TkVideoFormat fmt, uint8_t *_pData, int _nDataLen, int64_t _nPts);
-void InitVideoPES(PES *pPes, TkVideoFormat fmt, uint8_t *pData, int nDataLen, int64_t nPts);
-void InitAudioPES(PES *pPes, uint8_t *pData, int nDataLen, int64_t nPts);
-void InitPrivateTypePES(PES *pPes, uint8_t *pData, int nDataLen, int64_t nPts);
-int GetPESData(PES *pPes, int _nCounter, int _nPid, uint8_t *pData, int nLen); //返回0则到了EOF
+void LinkInitVideoPESWithPcr(LinkPES *_pPes, LinkVideoFormat fmt, uint8_t *_pData, int _nDataLen, int64_t _nPts);
+void LinkInitVideoPES(LinkPES *pPes, LinkVideoFormat fmt, uint8_t *pData, int nDataLen, int64_t nPts);
+void LinkInitAudioPES(LinkPES *pPes, uint8_t *pData, int nDataLen, int64_t nPts);
+void LinkInitPrivateTypePES(LinkPES *pPes, uint8_t *pData, int nDataLen, int64_t nPts);
+int LinkGetPESData(LinkPES *pPes, int _nCounter, int _nPid, uint8_t *pData, int nLen); //返回0则到了EOF
 
-int WriteTsHeader(uint8_t *_pBuf, int _nUinitStartIndicator, int _nCount, int _nPid, int _nAdaptationField);
-void SetAdaptationFieldFlag(uint8_t *_pBuf, int _nAdaptationField);
-void WriteContinuityCounter(uint8_t *pBuf, int nCounter);
-int WriteSDT(uint8_t *_pBuf, int _nUinitStartIndicator, int _nCount, int _nAdaptationField);
-int WritePAT(uint8_t *_pBuf, int _nUinitStartIndicator, int _nCount, int _nAdaptationField);
-int WritePMT(uint8_t *_pBuf, int _nUinitStartIndicator, int _nCount, int _nAdaptationField, int _nVStreamType, int _nAStreamType);
+int LinkWriteTsHeader(uint8_t *_pBuf, int _nUinitStartIndicator, int _nCount, int _nPid, int _nAdaptationField);
+void LinkSetAdaptationFieldFlag(uint8_t *_pBuf, int _nAdaptationField);
+void LinkWriteContinuityCounter(uint8_t *pBuf, int nCounter);
+int LinkWriteSDT(uint8_t *_pBuf, int _nUinitStartIndicator, int _nCount, int _nAdaptationField);
+int LinkWritePAT(uint8_t *_pBuf, int _nUinitStartIndicator, int _nCount, int _nAdaptationField);
+int LinkWritePMT(uint8_t *_pBuf, int _nUinitStartIndicator, int _nCount, int _nAdaptationField, int _nVStreamType, int _nAStreamType);
 
 #endif

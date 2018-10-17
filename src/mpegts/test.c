@@ -6,7 +6,7 @@
 #include "adts.h"
 #include "tsmux.h"
 
-TsMuxerArg avArg;
+LinkTsMuxerArg avArg;
 
 typedef int (*DataCallback)(void *opaque, void *pData, int nDataLen, int nFlag, int64_t timestamp, int nIsKeyFrame);
 #define THIS_IS_AUDIO 1
@@ -272,7 +272,7 @@ int start_file_test(char * _pAudioFile, char * _pVideoFile, DataCallback callbac
                                         break;
                                 }
                                 
-                                if (avArg.nVideoFormat == TK_VIDEO_H264) {
+                                if (avArg.nVideoFormat == LINK_VIDEO_H264) {
                                         if(start[2] == 0x01){//0x 00 00 01
                                                 type = start[3] & 0x1F;
                                         }else{ // 0x 00 00 00 01
@@ -536,24 +536,24 @@ end:
 }
 #endif
 
-TsMuxerContext *pTs;
+LinkTsMuxerContext *pTs;
 int nVideoTotal;
 static int dataCallback(void *opaque, void *pData, int nDataLen, int nFlag, int64_t timestamp, int nIsKeyFrame)
 {
         int ret = 0;
         if (nFlag == THIS_IS_AUDIO){
                 //printf("audio pts:%lld len:%d\n", timestamp, nDataLen);
-                MuxerAudio(pTs, pData, nDataLen, timestamp);
+                LinkMuxerAudio(pTs, pData, nDataLen, timestamp);
         } else {
                 nVideoTotal+=nDataLen;
                 //printf("video pts:%lld len:%d\n", timestamp, nDataLen);
-                MuxerVideo(pTs, pData, nDataLen, timestamp);
+                LinkMuxerVideo(pTs, pData, nDataLen, timestamp);
         }
         return ret;
 }
 
 void signalHandler(int s){
-        DestroyTsMuxerContext(pTs);
+        LinkDestroyTsMuxerContext(pTs);
         exit(0);
 }
 
@@ -588,15 +588,15 @@ int main(int argc, char* argv[])
         avArg.nAudioChannels = 1;
         avArg.nAudioSampleRate = 16000;
 #else
-        avArg.nAudioFormat = TK_AUDIO_PCMU;
+        avArg.nAudioFormat = LINK_AUDIO_PCMU;
         avArg.nAudioChannels = 1;
         avArg.nAudioSampleRate = 8000;
 #endif
         avArg.output = writeTs;
         avArg.pOpaque = pTs;
-        avArg.nVideoFormat = TK_VIDEO_H265;
+        avArg.nVideoFormat = LINK_VIDEO_H265;
         
-        pTs = NewTsMuxerContext(&avArg);
+        int ret = LinkNewTsMuxerContext(&avArg, &pTs);
 #ifdef __APPLE__
         char * pVFile = "/Users/liuye/Documents/material/h265_aac_1_16000_h264.h264";
   #ifdef TEST_AAC
@@ -604,7 +604,7 @@ int main(int argc, char* argv[])
   #else
         char * pAFile = "/Users/liuye/Documents/material/h265_aac_1_16000_pcmu_8000.mulaw";
   #endif
-        if (avArg.nVideoFormat == TK_VIDEO_H265) {
+        if (avArg.nVideoFormat == LINK_VIDEO_H265) {
                 pVFile = "/Users/liuye/Documents/material/h265_aac_1_16000_v.h265";
         }
 #else
@@ -630,7 +630,7 @@ int main(int argc, char* argv[])
         start_file_test(pAFile, pVFile, dataCallback, NULL);
 #endif
 
-        DestroyTsMuxerContext(pTs);
+        LinkDestroyTsMuxerContext(pTs);
         printf("nVideoTotal:%d\n:", nVideoTotal);
         return 0;
 }

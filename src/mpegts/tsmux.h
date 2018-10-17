@@ -3,22 +3,22 @@
 #include <stdint.h>
 #include "mpegts.h"
 
-typedef struct TsMuxerContext TsMuxerContext;
+typedef struct _LinkTsMuxerContext LinkTsMuxerContext;
 
 
 typedef struct {
-        TkAudioFormat nAudioFormat;
+        LinkAudioFormat nAudioFormat;
         int nAudioSampleRate;
         int nAudioChannels;
-        TkVideoFormat nVideoFormat;
-        TsPacketCallback output;
+        LinkVideoFormat nVideoFormat;
+        LinkTsPacketCallback output;
         void *pOpaque;
-}TsMuxerArg;
+}LinkTsMuxerArg;
 
-TsMuxerContext * NewTsMuxerContext(TsMuxerArg *pArg);
-int MuxerAudio(TsMuxerContext* pMuxerCtx, uint8_t *pData, int nDataLen, int64_t nPts);
-int MuxerVideo(TsMuxerContext* pMuxerCtx, uint8_t *pData, int nDataLen,  int64_t nPts);
-int MuxerFlush(TsMuxerContext* pMuxerCtx);
-void DestroyTsMuxerContext(TsMuxerContext *pTsMuxerCtx);
+int LinkNewTsMuxerContext(LinkTsMuxerArg *pArg, LinkTsMuxerContext **pTsMuxerContext);
+int LinkMuxerAudio(LinkTsMuxerContext* pMuxerCtx, uint8_t *pData, int nDataLen, int64_t nPts);
+int LinkMuxerVideo(LinkTsMuxerContext* pMuxerCtx, uint8_t *pData, int nDataLen,  int64_t nPts);
+int LinkMuxerFlush(LinkTsMuxerContext* pMuxerCtx);
+void LinkDestroyTsMuxerContext(LinkTsMuxerContext *pTsMuxerCtx);
 
 #endif

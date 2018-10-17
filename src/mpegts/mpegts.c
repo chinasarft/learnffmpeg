@@ -60,9 +60,9 @@ uint32_t crc32 (uint8_t *data, int len)
         return crc;
 }
 
-static void initPes(PES *_pPes, uint8_t *_pData, int _nDataLen, int64_t _nPts)
+static void initPes(LinkPES *_pPes, uint8_t *_pData, int _nDataLen, int64_t _nPts)
 {
-        memset(_pPes, 0, sizeof(PES));
+        memset(_pPes, 0, sizeof(LinkPES));
         _pPes->nPts = _nPts * 90; //90000hz, 这里传入的单位是毫秒
         _pPes->pESData = _pData;
         _pPes->nESDataLen = _nDataLen;
@@ -70,7 +70,7 @@ static void initPes(PES *_pPes, uint8_t *_pData, int _nDataLen, int64_t _nPts)
         return;
 }
 
-void InitVideoPES(PES *_pPes, TkVideoFormat _fmt, uint8_t *_pData, int _nDataLen, int64_t _nPts)
+void LinkInitVideoPES(LinkPES *_pPes, LinkVideoFormat _fmt, uint8_t *_pData, int _nDataLen, int64_t _nPts)
 {
         initPes(_pPes, _pData, _nDataLen, _nPts);
         _pPes->nStreamId = 0xE0;
@@ -79,54 +79,66 @@ void InitVideoPES(PES *_pPes, TkVideoFormat _fmt, uint8_t *_pData, int _nDataLen
         return;
 }
 
-void InitVideoPESWithPcr(PES *_pPes, TkVideoFormat fmt, uint8_t *_pData, int _nDataLen, int64_t _nPts)
+void LinkInitVideoPESWithPcr(LinkPES *_pPes, LinkVideoFormat fmt, uint8_t *_pData, int _nDataLen, int64_t _nPts)
 {
-        InitVideoPES(_pPes, fmt, _pData, _nDataLen, _nPts);
+        LinkInitVideoPES(_pPes, fmt, _pData, _nDataLen, _nPts);
         _pPes->nWithPcr = 1;
         return;
 }
 
-void InitAudioPES(PES *_pPes, uint8_t *_pData, int _nDataLen, int64_t _nPts)
+void LinkInitAudioPES(LinkPES *_pPes, uint8_t *_pData, int _nDataLen, int64_t _nPts)
 {
         initPes(_pPes, _pData, _nDataLen, _nPts);
         _pPes->nStreamId = 0xC0;
         return;
 }
 
-void InitPrivateTypePES(PES *_pPes, uint8_t *_pData, int _nDataLen, int64_t _nPts)
+void LinkInitPrivateTypePES(LinkPES *_pPes, uint8_t *_pData, int _nDataLen, int64_t _nPts)
 {
         initPes(_pPes, _pData, _nDataLen, _nPts);
-        _pPes->nStreamId = 0xC0;
+        _pPes->nStreamId = 0xBD;
         _pPes->nPrivate = 1;
         return;
 }
 
-void NewVideoPES(PES *_pPes, uint8_t *_pData, int _nDataLen, int64_t _nPts)
+void NewVideoPES(LinkPES *_pPes, uint8_t *_pData, int _nDataLen, int64_t _nPts)
 {
         initPes(_pPes, _pData, _nDataLen, _nPts);
         _pPes->nStreamId = 0xE0;
         return;
 }
 
-
+// pcr is millisecond
 static int writePcrBits(uint8_t *buf, int64_t pcr)
 {
         //int64_t pcr_low = pcr % 300, pcr_high = pcr / 300;
-        int64_t pcr_low = (pcr * 90000)%8589934592, pcr_high = (27000 * pcr) / 300;
+        /*
+         OPCR_base(i)= ((system_clock_frequencyxt(i))DIV 300)% 2^33
+         OPCR_ext(i)= ((system_clock_frequencyxt(i))DIV 1)% 300
+         OPCR(i)= OPCR_base(i)x300+OPCR_ext(i)
+         */
+        int64_t pcr_base = pcr%8589934592; //(pcr/90000 * 27000000/300)%8589934592;
+        int64_t pcr_ext = (pcr * 300) % 300; //(pcr/90000 * 27000000) % 300
         
-        *buf++ = pcr_high >> 25;
-        *buf++ = pcr_high >> 17;
-        *buf++ = pcr_high >>  9;
-        *buf++ = pcr_high >>  1;
-        *buf++ = pcr_high <<  7 | pcr_low >> 8 | 0x7e;
-        *buf++ = pcr_low;
+        
+        /*
+         program_clock_reference_base      33 uimsbf
+         reserved                          6bslbf
+         program_clock_reference_extension 9 uimsbf
+         */
+        *buf++ = pcr_base >> 25;
+        *buf++ = pcr_base >> 17;
+        *buf++ = pcr_base >>  9;
+        *buf++ = pcr_base >>  1;
+        *buf++ = pcr_base <<  7 | pcr_ext >> 8 | 0x7e;
+        *buf++ = pcr_ext;
         
         return 6;
 }
 
 static int writeAdaptationFieldJustWithPCR(uint8_t *_pBuf, int64_t _nPcr)
 {
-        _pBuf[1] = 0x10; //discontinuity_indicator 1bit(0); random_access_indicator 1bit(0); elementary_stream_priority_indicator 1bit(0)
+        _pBuf[1] = 0x50; //discontinuity_indicator 1bit(0); random_access_indicator 1bit(1); elementary_stream_priority_indicator 1bit(0)
         //PCR_flag 1bit(1); OPCR_flag 1bit(0); splicing_point_flag 1bit(0); transport_private_data_flag 1bit(0); adaptation_field_extension_flag 1bit(0)
         
         int nPcrLen = writePcrBits(&_pBuf[2], _nPcr);
@@ -145,8 +157,8 @@ static int writeAdaptationFieldJustWithPravatePadding(uint8_t *_pBuf)
 }
 
 #define AV_RB16(x)                           \
-     ((((const uint8_t*)(x))[0] << 8) |          \
-       ((const uint8_t*)(x))[1])
+((((const uint8_t*)(x))[0] << 8) |          \
+((const uint8_t*)(x))[1])
 static void printPts(uint8_t *buf){
         int64_t pts = (int64_t)(*buf & 0x0e) << 29 |
         (AV_RB16(buf+1) >> 1) << 15 |
@@ -154,122 +166,167 @@ static void printPts(uint8_t *buf){
         printf("pes pts:%lld\n", pts/90);
 }
 
-int GetPESData(PES *_pPes, int _nCounter, int _nPid, uint8_t *_pData, int _nLen)
+static int getPESHeaderJustWithPtsLen(LinkPES *_pPes)
+{
+        int nLen = 14;
+        if (_pPes->videoFormat == LINK_VIDEO_H264) {
+                nLen += sizeof(h264Aud);
+        } else if (_pPes->videoFormat == LINK_VIDEO_H265) {
+                nLen += sizeof(h265Aud);
+        }
+        return nLen;
+}
+
+static int writePESHeaderJustWithPts(LinkPES *_pPes, uint8_t *pData)
+{
+        uint8_t * pPts = NULL;
+        int nRetLen = 0;
+        pData[0] = 0; //packet_start_code_prefix 3bit(0x000001)
+        pData[1] = 0;
+        pData[2] = 1;
+        
+        pData[3] = _pPes->nStreamId; //stream_id 8bit
+        
+        int nLen = _pPes->nESDataLen + 8; //PES_packet_length 16bit header[6-13]长度为8
+        if (_pPes->videoFormat == LINK_VIDEO_H264) {
+                nLen += sizeof(h264Aud);
+        } else if (_pPes->videoFormat == LINK_VIDEO_H265) {
+                nLen += sizeof(h265Aud);
+        }
+        if (nLen > 65535) {
+                //A value of zero for the PES packet length can be used only when the PES packet payload is a video elementary stream
+                assert(_pPes->nStreamId >= 0xE0 && _pPes->nStreamId <= 0xEF);
+                pData[4] = 0;
+                pData[5] = 0;
+        } else {
+                pData[4] = nLen / 256;
+                pData[5] = nLen % 256;
+        }
+        
+        pData[6] = 0x80; //'10' 2bit(固定的)；PES_scrambling_control 2bit(0);PES_priority 1bit(0);data_alignment_indicator 1bit(0)
+        //copyright 1bit(0); original_or_copy 1bit(0)
+        pData[7] = 0x80; //PTS_DTS_flags 2bit(2, just PTS); ESCR_flag 1bit(0); ES_rate_flag 1bit(0); DSM_trick_mode_flag 1bit(0)
+        //additional_copy_info_flag 1bit(0); PES_CRC_flag 1bit(0); PES_extension_flag 1bit(0)
+        pData[8] = 5;//PES_header_data_length 8bit. 剩下长度， 只有pts，pes中pts/dts长度为5
+        
+        int64_t nPts = _pPes->nPts;
+        //pts
+        /*
+         '0010'              4bit
+         PTS [32..30]        3bit
+         marker_bit          1bit
+         PTS [29..15]        15bit
+         marker_bit          1bit
+         PTS [14..0]         15bit
+         marker_bit          1bit
+         */
+        pData[9]   = 0x21 | ((nPts >> 29) & 0x0E); //0x21 --> 0010 0001
+        pData[10] =  (nPts >>22 & 0xFF);
+        pData[11] = 0x01 | ((nPts >> 14 ) & 0xFE);
+        pData[12] =  (nPts >> 7 & 0xFF);
+        pData[13] = 0x01 | ((nPts << 1 ) & 0xFE);
+        nRetLen += 14;
+        
+        if (_pPes->videoFormat == LINK_VIDEO_H264) {
+                memcpy(&pData[nRetLen], h264Aud, sizeof(h264Aud));
+                nRetLen += sizeof(h264Aud);
+        } else if (_pPes->videoFormat == LINK_VIDEO_H265) {
+                memcpy(&pData[nRetLen], h265Aud, sizeof(h265Aud));
+                nRetLen += sizeof(h265Aud);
+        }
+        
+        pPts=pData+9; //for debug
+        
+        //if (pPts != NULL && (_pPes->videoFormat == LINK_VIDEO_H264 || _pPes->videoFormat == LINK_VIDEO_H265))
+        //        printPts(pPts);
+        
+        return nRetLen;
+}
+
+int LinkGetPESData(LinkPES *_pPes, int _nCounter, int _nPid, uint8_t *_pData, int _nLen)
 {
         if (_pPes->nPos == _pPes->nESDataLen)
                 return 0;
-
+        
         int nRetLen = 0;
         int nRemainLen = _pPes->nESDataLen - _pPes->nPos;
         uint8_t * pData = _pData;
-        uint8_t * pPts = NULL;
+        
+        int isPaddingBeforePesHdr = 0;
+        int nPesHdrLen = 0;
         if (_pPes->nPos == 0) {
-                nRetLen = WriteTsHeader(pData, 1, _nCounter, _nPid, ADAPTATION_JUST_PAYLOAD);
+                nRetLen = LinkWriteTsHeader(pData, 1, _nCounter, _nPid, LINK_ADAPTATION_JUST_PAYLOAD);
                 //https://en.wikipedia.org/wiki/Packetized_elementary_stream
                 pData += nRetLen;
                 
-                if (_pPes->nWithPcr == 1) {
-                        SetAdaptationFieldFlag(_pData, ADAPTATION_BOTH);
+                if (_pPes->nWithPcr == 1) { //关键帧不可能小于188
+                        LinkSetAdaptationFieldFlag(_pData, LINK_ADAPTATION_BOTH);
                         int nAdaLen = writeAdaptationFieldJustWithPCR(pData, _pPes->nPts);
                         nRetLen += nAdaLen;
                         pData += nAdaLen;
-                } else if (_pPes->nPrivate == 1) {
-                        SetAdaptationFieldFlag(_pData, ADAPTATION_BOTH);
-                        int nAdaLen = writeAdaptationFieldJustWithPravatePadding(pData);
-                        nRetLen += nAdaLen;
-                        pData += nAdaLen;
-                }
-                
-                
-                //pes packet
-                pData[0] = 0; //packet_start_code_prefix 3bit(0x000001)
-                pData[1] = 0;
-                pData[2] = 1;
-                
-                pData[3] = _pPes->nStreamId; //stream_id 8bit
-                
-                int nLen = _pPes->nESDataLen + 8; //PES_packet_length 16bit header[6-13]长度为8
-                if (_pPes->videoFormat == TK_VIDEO_H264) {
-                        nLen += sizeof(h264Aud);
-                } else if (_pPes->videoFormat == TK_VIDEO_H265) {
-                        nLen += sizeof(h265Aud);
-                }
-                if (nLen > 65535) {
-                        //A value of zero for the PES packet length can be used only when the PES packet payload is a video elementary stream
-                        assert(_pPes->nStreamId >= 0xE0 && _pPes->nStreamId <= 0xEF);
-                        pData[4] = 0;
-                        pData[5] = 0;
+                        
+                        int nPesHdrLen = writePESHeaderJustWithPts(_pPes, pData);
+                        nRetLen += nPesHdrLen;
+                        pData += nPesHdrLen;
                 } else {
-                        pData[4] = nLen / 256;
-                        pData[5] = nLen % 256;
+                        nPesHdrLen = getPESHeaderJustWithPtsLen(_pPes);
+                        if (nPesHdrLen + nRetLen + _pPes->nESDataLen < 188) {
+                                isPaddingBeforePesHdr = 1;
+                        } else {
+                                writePESHeaderJustWithPts(_pPes, pData);
+                                nRetLen += nPesHdrLen;
+                                pData += nPesHdrLen;
+                                nPesHdrLen = 0;
+                        }
                 }
                 
-                pData[6] = 0x80; //'10' 2bit(固定的)；PES_scrambling_control 2bit(0);PES_priority 1bit(0);data_alignment_indicator 1bit(0)
-                                 //copyright 1bit(0); original_or_copy 1bit(0)
-                pData[7] = 0x80; //PTS_DTS_flags 2bit(2, just PTS); ESCR_flag 1bit(0); ES_rate_flag 1bit(0); DSM_trick_mode_flag 1bit(0)
-                                 //additional_copy_info_flag 1bit(0); PES_CRC_flag 1bit(0); PES_extension_flag 1bit(0)
-                pData[8] = 5;//PES_header_data_length 8bit. 剩下长度， 只有pts，pes中pts/dts长度为5
-                
-                int64_t nPts = _pPes->nPts;
-                //pts
-                pData[9]   = 0x21 | ((nPts >> 29) & 0x0E);
-                pData[10] =  (nPts >>22 & 0xFF);
-                pData[11] = 0x01 | ((nPts >> 14 ) & 0xFE);
-                pData[12] =  (nPts >> 7 & 0xFF);
-                pData[13] = 0x01 | ((nPts << 1 ) & 0xFE);
-                nRetLen += 14;
-                pPts=pData+9;
-                
-                if (_pPes->videoFormat == TK_VIDEO_H264) {
-                        memcpy(&_pData[nRetLen], h264Aud, sizeof(h264Aud));
-                        nRetLen += sizeof(h264Aud);
-                } else if (_pPes->videoFormat == TK_VIDEO_H265) {
-                        memcpy(&_pData[nRetLen], h265Aud, sizeof(h265Aud));
-                        nRetLen += sizeof(h265Aud);
-                }
         }  else {
-                nRetLen = WriteTsHeader(pData, 0, _nCounter, _nPid, ADAPTATION_JUST_PAYLOAD);
+                nRetLen = LinkWriteTsHeader(pData, 0, _nCounter, _nPid, LINK_ADAPTATION_JUST_PAYLOAD);
         }
-
+        
         int nAdapLen = 0;
         int nReadLen = nRemainLen > _nLen ? _nLen : nRemainLen;
-        if (nReadLen + nRetLen >= 188) {
+        if (nReadLen + nRetLen + nPesHdrLen >= 188) {
                 nReadLen = 188 - nRetLen;
                 memcpy(&_pData[nRetLen], _pPes->pESData + _pPes->nPos, nReadLen);
         } else {
                 nRetLen += 2; //两字节的adaptation_field
-                if (nReadLen + nRetLen > 188) {
-                        nReadLen = 188 - nRetLen;
+                if (nReadLen + nRetLen + nPesHdrLen > 188) {
+                        nReadLen = 188 - nRetLen - nPesHdrLen;
                 }
-                nAdapLen = 188 - nRetLen - nReadLen;
-
+                nAdapLen = 188 - nRetLen - nPesHdrLen - nReadLen;
+                
                 _pData[nRetLen-2] = nAdapLen + 1; //adaptation_field_lenght不算，但是后面的一个字节算
                 _pData[nRetLen-1] = 0x00;
-                SetAdaptationFieldFlag(_pData, ADAPTATION_BOTH); //前面填充ff,然后才是数据
+                LinkSetAdaptationFieldFlag(_pData, LINK_ADAPTATION_BOTH); //前面填充ff,然后才是数据
+                
                 memset(_pData + nRetLen, 0xff, nAdapLen);
+                
+                nRetLen += nAdapLen; 
+                if (isPaddingBeforePesHdr) {
+                        nRetLen += writePESHeaderJustWithPts(_pPes, &_pData[nRetLen]);
+                }
                 memcpy(&_pData[188 - nReadLen], _pPes->pESData + _pPes->nPos, nReadLen);
         }
         
         _pPes->nPos += nReadLen;
         nRetLen += nReadLen;
-        assert(nRetLen + nAdapLen == 188);
-        if (pPts != NULL && (_pPes->videoFormat == TK_VIDEO_H264 || _pPes->videoFormat == TK_VIDEO_H265))
-                printPts(pPts);
+        assert(nRetLen == 188);
         return 188;
 }
 
-void SetAdaptationFieldFlag(uint8_t *_pBuf, int _nAdaptationField)
+void LinkSetAdaptationFieldFlag(uint8_t *_pBuf, int _nAdaptationField)
 {
         _pBuf[3] |= (_nAdaptationField << 4);
         return;
 }
 
-void WriteContinuityCounter(uint8_t *_pBuf, int _nCounter)
+void LinkWriteContinuityCounter(uint8_t *_pBuf, int _nCounter)
 {
         _pBuf[3] |= _nCounter;
 }
 
-int WriteTsHeader(uint8_t *_pBuf, int _nUinitStartIndicator, int _nCount, int _nPid, int _nAdaptationField)
+int LinkWriteTsHeader(uint8_t *_pBuf, int _nUinitStartIndicator, int _nCount, int _nPid, int _nAdaptationField)
 {
         _pBuf[0] = 0x47;
         memset(_pBuf+1, 0, 3);
@@ -281,16 +338,16 @@ int WriteTsHeader(uint8_t *_pBuf, int _nUinitStartIndicator, int _nCount, int _n
         _pBuf[1] |= nHighPid;
         _pBuf[2] = nLowPid;
         
-        SetAdaptationFieldFlag(_pBuf, _nAdaptationField);
+        LinkSetAdaptationFieldFlag(_pBuf, _nAdaptationField);
         _pBuf[3] |= _nCount;
         
         return 4;
 }
 
-int WriteSDT(uint8_t *_pBuf, int _nUinitStartIndicator, int _nCount, int _nAdaptationField)
+int LinkWriteSDT(uint8_t *_pBuf, int _nUinitStartIndicator, int _nCount, int _nAdaptationField)
 {
         int nRetLen = 4;
-        WriteTsHeader(_pBuf, _nUinitStartIndicator, _nCount, SDT_PID, _nAdaptationField);
+        LinkWriteTsHeader(_pBuf, _nUinitStartIndicator, _nCount, LINK_SDT_PID, _nAdaptationField);
         _pBuf += 4;
         if (_nUinitStartIndicator) {
                 _pBuf[0] = 0;
@@ -343,10 +400,10 @@ int WriteSDT(uint8_t *_pBuf, int _nUinitStartIndicator, int _nCount, int _nAdapt
         return 39+nRetLen;
 }
 
-int WritePAT(uint8_t *_pBuf, int _nUinitStartIndicator, int _nCount, int _nAdaptationField)
+int LinkWritePAT(uint8_t *_pBuf, int _nUinitStartIndicator, int _nCount, int _nAdaptationField)
 {
         int nRetLen = 4;
-        WriteTsHeader(_pBuf, _nUinitStartIndicator, _nCount, PAT_PID, _nAdaptationField);
+        LinkWriteTsHeader(_pBuf, _nUinitStartIndicator, _nCount, LINK_PAT_PID, _nAdaptationField);
         _pBuf += 4;
         if (_nUinitStartIndicator) {
                 _pBuf[0] = 0;
@@ -383,10 +440,12 @@ int WritePAT(uint8_t *_pBuf, int _nUinitStartIndicator, int _nCount, int _nAdapt
 }
 
 
-int WritePMT(uint8_t *_pBuf, int _nUinitStartIndicator, int _nCount, int _nAdaptationField, int _nVStreamType, int _nAStreamType)
+int LinkWritePMT(uint8_t *_pBuf, int _nUinitStartIndicator, int _nCount, int _nAdaptationField, int _nVStreamType, int _nAStreamType)
 {
+        assert(_nVStreamType ||  _nAStreamType);
         int nRetLen = 4;
-        WriteTsHeader(_pBuf, _nUinitStartIndicator, _nCount, PMT_PID, _nAdaptationField);
+        int noAOrV = 0;
+        LinkWriteTsHeader(_pBuf, _nUinitStartIndicator, _nCount, LINK_PMT_PID, _nAdaptationField);
         _pBuf += 4;
         if (_nUinitStartIndicator) {
                 _pBuf[0] = 0;
@@ -413,19 +472,27 @@ int WritePMT(uint8_t *_pBuf, int _nUinitStartIndicator, int _nCount, int _nAdapt
         _pBuf[10] = 0xF0; //reserved 4bit
         _pBuf[11] = 0x00; //program_info_length 12bit(00 mean no descriptor)
         
-        _pBuf[12] = _nVStreamType; //stream_type 8bit STREAM_TYPE_VIDEO_H264
-        _pBuf[13] = 0xE1; //reserved 3bit(7), include elementary_PID 5bit
-        _pBuf[14] = 0x00; //remain elementary_PID 8bit
+        if (_nVStreamType != 0) {
+                _pBuf[12] = _nVStreamType; //stream_type 8bit STREAM_TYPE_VIDEO_H264
+                _pBuf[13] = 0xE1; //reserved 3bit(7), include elementary_PID 5bit
+                _pBuf[14] = 0x00; //remain elementary_PID 8bit
+                _pBuf[15] = 0xF0; //reserved 4bit, include program_info_length 4bit
+                _pBuf[16] = 0x00; //remaint program_info_length 8bit
+        } else {
+                _pBuf[2] = 0x12; //section_length 12bit
+                noAOrV = -5;
+        }
         
-        _pBuf[15] = 0xF0; //reserved 4bit, include program_info_length 4bit
-        _pBuf[16] = 0x00; //remaint program_info_length 8bit
-        
-        _pBuf[17] = _nAStreamType; //stream_type 8bit STREAM_TYPE_VIDEO_H264
-        _pBuf[18] = 0xE1; //reserved 3bit(7), include elementary_PID 5bit
-        _pBuf[19] = 0x01; //remain elementary_PID 8bit
-        
-        _pBuf[20] = 0xF0; //reserved 4bit, include program_info_length 4bit
-        _pBuf[21] = 0x00; //remaint program_info_length 8bit
+        if (_nAStreamType != 0) {
+                _pBuf[17] = _nAStreamType; //stream_type 8bit STREAM_TYPE_VIDEO_H264
+                _pBuf[18] = 0xE1; //reserved 3bit(7), include elementary_PID 5bit
+                _pBuf[19] = 0x01; //remain elementary_PID 8bit
+                _pBuf[20] = 0xF0; //reserved 4bit, include program_info_length 4bit
+                _pBuf[21] = 0x00; //remaint program_info_length 8bit
+        } else {
+                noAOrV = -5;
+                _pBuf[2] = 0x12; //section_length 12bit
+        }
         
         uint32_t c32 = crc32(_pBuf, 22);
         uint8_t *pTmp =  (uint8_t*)&c32;
@@ -434,5 +501,5 @@ int WritePMT(uint8_t *_pBuf, int _nUinitStartIndicator, int _nCount, int _nAdapt
         _pBuf[24] = pTmp[1];
         _pBuf[25] = pTmp[0];
         
-        return 26+nRetLen;
+        return 26+nRetLen+noAOrV;
 }
