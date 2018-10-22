@@ -32,6 +32,8 @@ add_library(avinput SHARED
         ThreadCleaner.cpp
         Statistics.h
         Statistics.cpp
+	receiver.hpp
+	receiver.cpp
 	)
 
 if(WIN32)

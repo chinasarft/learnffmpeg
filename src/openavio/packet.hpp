@@ -3,12 +3,14 @@
 
 #include "common.hpp"
 
+class FeedFrame;
 class MediaPacket
 {
 public:
     MediaPacket(IN const AVStream& pAvStream, IN const AVPacket* pAvPacket);
     ~MediaPacket();
     MediaPacket();
+    MediaPacket(IN FeedFrame & feedFrame);
     MediaPacket(const MediaPacket&) = delete; // no copy for risk concern
 
     // get raw AV structs

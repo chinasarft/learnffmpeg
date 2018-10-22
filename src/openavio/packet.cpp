@@ -20,6 +20,49 @@ MediaPacket::MediaPacket(IN const AVStream& _avStream, IN const AVPacket* _pAvPa
     pAvPacket_ = const_cast<AVPacket*>(_pAvPacket);
 }
 
+MediaPacket::MediaPacket(IN FeedFrame & feedFrame) {
+        
+        enum AVCodecID codecId;
+        switch(feedFrame.type_) {
+                case ReceiverType::H264 :
+                        stream_ = AVMEDIA_TYPE_VIDEO;
+                        codecId = AV_CODEC_ID_H264;
+                        break;
+                case ReceiverType::H265 :
+                        stream_ = AVMEDIA_TYPE_VIDEO;
+                        codecId = AV_CODEC_ID_HEVC;
+                        break;
+                case ReceiverType::G711A :
+                        stream_ = AVMEDIA_TYPE_AUDIO;
+                        codecId = AV_CODEC_ID_PCM_ALAW;
+                        break;
+                case ReceiverType::G711U :
+                        stream_ = AVMEDIA_TYPE_AUDIO;
+                        codecId = AV_CODEC_ID_PCM_MULAW;
+                        break;
+                case ReceiverType::PCMS16E :
+                        stream_ = AVMEDIA_TYPE_AUDIO;
+                        codecId = AV_CODEC_ID_PCM_S16LE;
+                        break;
+                case ReceiverType::AACNoAdts :
+                case ReceiverType::AACAdts :
+                        stream_ = AVMEDIA_TYPE_AUDIO;
+                        codecId = AV_CODEC_ID_AAC;
+                        break;
+                default:
+                        codecId = AV_CODEC_ID_NONE;
+        }
+        SetCodec(codecId);
+        
+        AVPacket* pAvPacket = av_packet_alloc();
+        av_init_packet(pAvPacket);
+        pAvPacket->data = reinterpret_cast<uint8_t *>(feedFrame.data_.data());
+        pAvPacket->size = feedFrame.data_.size();
+        pAvPacket->pts = feedFrame.nPts_;
+        pAvPacket->dts = feedFrame.nDts_;
+        pAvPacket_ = const_cast<AVPacket*>(pAvPacket);
+}
+
 MediaPacket::MediaPacket()
 {
     pAvPacket_ = av_packet_alloc();

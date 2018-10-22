@@ -3,14 +3,41 @@
 
 #include "common.hpp"
 #include "Statistics.h"
+#include "receiver.hpp"
+
 
 class MediaPacket;
 class MediaFrame;
 class AudioResampler;
 // AvReceiver
 typedef const std::function<int(const std::unique_ptr<MediaPacket>)> PacketHandlerType;
+
 typedef void(*GetFrameCallback)(void * ,std::shared_ptr<MediaFrame>&);
 typedef int(*FeedDataCallback)(void *, uint8_t *buf, int buf_size);
+
+enum class ReceiverType {
+        UNKNOWN = 0,
+        H264 = 1,
+        H265 = 2,
+        G711A = 3,
+        G711U = 4,
+        PCMS16E = 5,
+        AACNoAdts = 7,
+        AACAdts = 8
+};
+
+class FeedFrame {
+public:
+        std::vector<char> data_;
+        int64_t nPts_;
+        int64_t nDts_;
+        ReceiverType type_;
+        bool isKeyFrame_;
+        int nChannle_;
+        int nSampleRate_;
+};
+
+typedef int(*FeedRawDataWithPtsCallback)(void *, FeedFrame* frame);
 
 typedef struct InputParam {
     std::string name_;
@@ -19,6 +46,8 @@ typedef struct InputParam {
     void * userData_;
     GetFrameCallback getFrameCb_ = nullptr;
     FeedDataCallback feedDataCb_ = nullptr;
+    FeedRawDataWithPtsCallback feedRawDataWithPts_ = nullptr;
+    int receiverTimeout_;
     void * feedCbOpaqueArg_ = nullptr;
     std::vector<std::string> audioOpts;
     std::vector<std::string> videoOpts;
@@ -28,8 +57,39 @@ typedef struct InputParam {
 class AvReceiver
 {
 public:
-    AvReceiver(IN InputParam * param);
-    ~AvReceiver();
+        virtual int Receive(PacketHandlerType& callback) = 0;
+        //CtxFps 有些容器格式有fps的信息
+        virtual int GetVideoCtxFps() = 0;
+        virtual int GetAudioCtxFps() = 0;
+        virtual int HasAudio() = 0;
+        virtual int HasVideo() = 0;
+};
+
+class RawReceiver : public AvReceiver
+{
+public:
+        RawReceiver(void *callbackArg, FeedRawDataWithPtsCallback callback, int timeout);
+        ~RawReceiver();
+        virtual int Receive(PacketHandlerType& callback) ;
+        //CtxFps 有些容器格式有fps的信息
+        virtual int GetVideoCtxFps() {return -1;};
+        virtual int GetAudioCtxFps() {return -1;};
+        virtual int HasAudio() {return hasAudio_;}
+        virtual int HasVideo() {return hasVideo_;}
+        
+private:
+        bool hasAudio_ = false;
+        bool hasVideo_ = false;
+        FeedRawDataWithPtsCallback feedRawDataWithPtsCallback_ = nullptr;
+        int timeout_ = 10;
+        void * callbackArg_;
+};
+
+class FFmpegAvReceiver : public AvReceiver
+{
+public:
+    FFmpegAvReceiver(IN InputParam * param);
+    ~FFmpegAvReceiver();
     int Receive(IN PacketHandlerType& callback);
 
     int GetVideoCtxFps(){return videoAvgFps_;}

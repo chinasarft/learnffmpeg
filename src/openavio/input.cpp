@@ -6,17 +6,17 @@
 // AvReceiver
 //
 
-AvReceiver::AvReceiver(IN InputParam * _param) :
+FFmpegAvReceiver::FFmpegAvReceiver(IN InputParam * _param) :
     param_(_param)
 {
 }
 
-AvReceiver::~AvReceiver()
+FFmpegAvReceiver::~FFmpegAvReceiver()
 {
     release();
 }
 
-void AvReceiver::release()
+void FFmpegAvReceiver::release()
 {
     if (pAvContext_ != nullptr) {
         avformat_close_input(&pAvContext_);
@@ -33,10 +33,10 @@ void AvReceiver::release()
     }
 }
 
-int AvReceiver::AvInterruptCallback(void* _pContext)
+int FFmpegAvReceiver::AvInterruptCallback(void* _pContext)
 {
     using namespace std::chrono;
-    AvReceiver* pReceiver = reinterpret_cast<AvReceiver*>(_pContext);
+    FFmpegAvReceiver* pReceiver = reinterpret_cast<FFmpegAvReceiver*>(_pContext);
     high_resolution_clock::time_point now = high_resolution_clock::now();
     auto diff = duration_cast<milliseconds>(now - pReceiver->start_).count();
     if (diff > pReceiver->nTimeout_) {
@@ -51,7 +51,7 @@ int AvReceiver::AvInterruptCallback(void* _pContext)
     return 0;
 }
 
-int AvReceiver::initContext()
+int FFmpegAvReceiver::initContext()
 {
     if (pAvContext_ != nullptr) {
         logwarn("AvReceiver already inited");
@@ -69,7 +69,7 @@ int AvReceiver::initContext()
         logerror("av context could not be created");
         return -3;
     }
-    pAvContext_->interrupt_callback.callback = AvReceiver::AvInterruptCallback;
+    pAvContext_->interrupt_callback.callback = FFmpegAvReceiver::AvInterruptCallback;
     pAvContext_->interrupt_callback.opaque = this;
 
     // for timeout timer
@@ -182,7 +182,7 @@ int AvReceiver::initContext()
     return 0;
 }
 
-int AvReceiver::Receive(IN PacketHandlerType& _callback)
+int FFmpegAvReceiver::Receive(IN PacketHandlerType& _callback)
 {
     int ret = initContext();
     if (ret != 0) {
@@ -223,6 +223,45 @@ int AvReceiver::Receive(IN PacketHandlerType& _callback)
         }
     }
 
+    return 0;
+}
+            
+            
+RawReceiver::RawReceiver(void *callbackArg, FeedRawDataWithPtsCallback callback, int timeout) :
+feedRawDataWithPtsCallback_(callback),
+timeout_(timeout),
+callbackArg_(callbackArg){
+}
+
+RawReceiver::~RawReceiver(){
+    
+}
+
+int RawReceiver::Receive(PacketHandlerType& _callback) {
+    if (feedRawDataWithPtsCallback_ == nullptr) {
+            return -1;
+    }
+    
+    FeedFrame feedFrame;
+    while (true) {
+            int ret = 0;
+            if ((ret = feedRawDataWithPtsCallback_(callbackArg_, &feedFrame)) == 0) {
+                    fprintf(stderr, "raw receive pts:%lld %d %d\n", feedFrame.nPts_, feedFrame.type_, feedFrame.data_.size());
+                    int nStatus = _callback(std::make_unique<MediaPacket>(feedFrame));
+                    if (nStatus != 0) {
+                            return nStatus;
+                    }
+            }
+            else {
+#if LOG_TRADITIONAL
+                    logerror("feedRawDataWithPtsCallback_ error:%d", ret);
+#else
+                    logerror("feedRawDataWithPtsCallback_ error:{}", ret);
+#endif
+                    break;
+            }
+    }
+    
     return 0;
 }
 
@@ -385,7 +424,10 @@ void Input::Start()
 {
     auto recv = [this] {
         while (bReceiverExit_.load() == false) {
-            avReceiver_ = std::make_unique<AvReceiver>(&param_);
+            if (param_.feedRawDataWithPts_ == nullptr)
+                avReceiver_ = std::make_unique<FFmpegAvReceiver>(&param_);
+            else
+                avReceiver_ = std::make_unique<RawReceiver>(param_.feedCbOpaqueArg_, param_.feedRawDataWithPts_, param_.receiverTimeout_);
             vDecoder_ = std::make_unique<AvDecoder>();
             aDecoder_ = std::make_unique<AvDecoder>();
 
