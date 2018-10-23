@@ -604,7 +604,7 @@ void Input::setPts(const std::shared_ptr<MediaFrame>& _pFrame, int64_t nFrameCou
 {
         if (_pFrame->pts == AV_NOPTS_VALUE) { // pts拿不到，比如裸的h264文件
                 //assert(_nFps != 0);
-                if (_nFps != 0) {
+                if (_nFps > 0) {
                         _pFrame->pts = (nFrameCount_ * 1000 / _nFps);
                 } else {
                         if (_nPrevTime == -1) {
@@ -662,7 +662,9 @@ void Input::outputFrame(const std::shared_ptr<MediaFrame>& _pFrame)
     }
     else if (_pFrame->GetStreamType() == AVMEDIA_TYPE_VIDEO) {
         videoFrameCount_++;
-        setPts(_pFrame, videoFrameCount_, prevVideoPts, avReceiver_->GetVideoCtxFps());
+        int nFps = avReceiver_->GetVideoCtxFps();
+        nFps = nFps > 0 ? nFps : 25;
+        setPts(_pFrame, videoFrameCount_, prevVideoPts, nFps);
 #if LOG_TRADITIONAL
             logdebug("origin videopts:%lld adjustpts:%lld", originPts,  _pFrame->pts);
 #else
