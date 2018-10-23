@@ -246,7 +246,7 @@ int RawReceiver::Receive(PacketHandlerType& _callback) {
     while (true) {
             int ret = 0;
             if ((ret = feedRawDataWithPtsCallback_(callbackArg_, &feedFrame)) == 0) {
-                    fprintf(stderr, "raw receive pts:%lld %d %d\n", feedFrame.nPts_, feedFrame.type_, feedFrame.data_.size());
+                    //fprintf(stderr, "raw receive pts:%lld %d %d\n", feedFrame.nPts_, feedFrame.type_, feedFrame.data_.size());
                     int nStatus = _callback(std::make_unique<MediaPacket>(feedFrame));
                     if (nStatus != 0) {
                             return nStatus;

@@ -22,6 +22,8 @@ MediaPacket::MediaPacket(IN const AVStream& _avStream, IN const AVPacket* _pAvPa
 
 MediaPacket::MediaPacket(IN FeedFrame & feedFrame) {
         
+        AVCodecParameters *param = avcodec_parameters_alloc();
+        shouldFreeAvCodecParameters = true;
         enum AVCodecID codecId;
         switch(feedFrame.type_) {
                 case ReceiverType::H264 :
@@ -54,6 +56,26 @@ MediaPacket::MediaPacket(IN FeedFrame & feedFrame) {
         }
         SetCodec(codecId);
         
+        switch(feedFrame.type_) {
+                case ReceiverType::G711A :
+                case ReceiverType::PCMS16E :
+                case ReceiverType::G711U :
+                        param->channels = 1;
+                        param->channel_layout = AV_CH_LAYOUT_MONO;
+                        param->sample_rate = 8000;
+                        param->codec_id = codecId;
+                        param->codec_type = AVMEDIA_TYPE_AUDIO;
+                        param->format = AV_SAMPLE_FMT_S16;
+                        param->bits_per_coded_sample = 8;
+                        param->bits_per_raw_sample = 16;
+                        if (ReceiverType::PCMS16E == feedFrame.type_)
+                                param->bits_per_coded_sample = 16;
+                        break;
+                default:
+                        codecId = AV_CODEC_ID_NONE;
+        }
+        pAvCodecPar_ = param;
+        
         AVPacket* pAvPacket = av_packet_alloc();
         av_init_packet(pAvPacket);
         pAvPacket->data = reinterpret_cast<uint8_t *>(feedFrame.data_.data());
@@ -71,6 +93,10 @@ MediaPacket::MediaPacket()
 
 MediaPacket::~MediaPacket()
 {
+    if (shouldFreeAvCodecParameters) {
+        if (pAvCodecPar_)
+                avcodec_parameters_free(&pAvCodecPar_);
+    }
     av_packet_free(&pAvPacket_);
 }
 

@@ -62,6 +62,7 @@ private:
     // video specific
     int nWidth_ = -1, nHeight_ = -1;
     int nSampleRate_ = -1, nChannels_ = -1;
+    bool shouldFreeAvCodecParameters = false;
 };
 
 class MediaFrame
