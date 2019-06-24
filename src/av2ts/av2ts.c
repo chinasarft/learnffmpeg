@@ -46,7 +46,7 @@ int main(int argc, char* argv[])
     AVCodecContext *codec_ctx_v = NULL;
     AVCodecContext *codec_ctx_a = NULL;
 
-    const char *in_filename_v = "128x128.264";
+        const char *in_filename_v = "/Users/liuye/tmp/a.ts";//128x128.264";
     const char *in_filename_a = "aa.aac";
 
     const char *out_filename = "cuc_ieschool.mp4";//Output file URL

@@ -1,11 +1,6 @@
 #ifndef UTIL_H
 #define UTIL_H
 
-
-class util
-{
-public:
-    util();
-};
+uint32_t GetCrc32 (uint8_t *data, int len);
 
 #endif // UTIL_H

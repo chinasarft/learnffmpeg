@@ -524,6 +524,7 @@ int TToolStartRead(TToolReadArg *pArg, void **pHandle)
 int  TToolGetFrame(void *pHandle, const unsigned char **pFrame, int *nFrameLen, int *pIsKeyFrame)
 {
 	TToolReadPolicy *pCtx = (TToolReadPolicy *)pHandle;
+	*pIsKeyFrame = 0;
 	if (pCtx->callback == NULL) {
 		return getOneFrame(pCtx, pFrame, nFrameLen, pIsKeyFrame);
 	}

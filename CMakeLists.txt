@@ -12,7 +12,13 @@ if(NOT FFLIBDIR)
 endif()
 
 
+
 add_subdirectory(src/av2ts)
 add_subdirectory(src/av2rtpts)
 add_subdirectory(src/av2rtpartpv)
 add_subdirectory(src/opensdp)
+add_subdirectory(src/openavio)
+add_subdirectory(src/av2ts2mem)
+add_subdirectory(src/readfile)
+add_subdirectory(src/mpegts)
+add_subdirectory(src/fmp4)

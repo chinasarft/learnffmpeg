@@ -3,6 +3,22 @@
 
 #include <stdint.h>
 
+typedef struct {
+	int nStartCodeLen;
+	int nOffset;
+	int nLenght
+}TToolH264Fragment;
+typedef struct {
+	int nBufLen;
+	char buf[0];
+}TToolBuffer;
+
+union {
+	TToolH264Fragment frags[5];	
+	TToolBuffer buffer;
+}TToolAvExtra;
+
+
 typedef enum {
 	TTOOL_AUDIO_TYPE = 1,
 	TTOOL_VIDEO_TYPE =2

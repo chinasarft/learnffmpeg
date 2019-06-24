@@ -87,72 +87,10 @@ public:
     unsigned stuffing_byte:8;
 };
 
-class TsPATMapEntry {
-public:
-    unsigned program_number                  : 16;
-    unsigned reserved_3                      : 3;
-    unsigned network_or_program_map_PID      : 13;  // if(program_number == '0') network_PID
-};
-// Program Association Table
-class TsPAT : public Parser
-{
-public:
-    unsigned table_id                        : 8; //固定为0x00 ，标志是该表是PAT
-    unsigned section_syntax_indicator        : 1; //段语法标志位，固定为1
-    unsigned zero                            : 1; //0
-    unsigned reserved_1                      : 2; // 保留位
-    unsigned section_length                  : 12;//表示这个字节后面有用的字节数，包括CRC32
-    unsigned transport_stream_id             : 16;//该传输流的ID，区别于一个网络中其它多路复用的流
-    unsigned reserved_2                      : 2; // 保留位
-    unsigned version_number                  : 5; //范围0-31，表示PAT的版本号
-    unsigned current_next_indicator          : 1; //发送的PAT是当前有效还是下一个PAT有效
-    unsigned section_number                  : 8; //分段的号码。PAT可能分为多段传输，第一段为00，以后每个分段加1，最多可能有256个分段
-    unsigned last_section_number             : 8; //最后一个分段的号码
-    unsigned CRC_32                          : 32;
-    std::vector<TsPATMapEntry> program_number_map_entries;
 
-public:
-    /**
-     * @pTSBuf: ts原始数据
-     * @pPat:
-     * return > 0 success. 表示解析的数据长度
-     *        <= 0失败
-     **/
-    int Parse(unsigned char *pTSData);
-};
 
-class TsPMTMapEntry {
-public:
-    unsigned stream_type                     : 8;
-    unsigned reserved_5                      : 3;
-    unsigned elementary_PID                  : 13;
-    unsigned reserved_6                      : 4;
-    unsigned ES_info_length                  : 12;
-};
-// Program Map Table
-class TsPMT : public Parser
-{
-public:
-     unsigned table_id                        : 8;
-     unsigned section_syntax_indicator        : 1;
-     unsigned zero                            : 1;
-     unsigned reserved_1                      : 2;
-     unsigned section_length                  : 12;
-     unsigned program_number                  : 16;
-     unsigned reserved_2                      : 2;
-     unsigned version_number                  : 5;
-     unsigned current_next_indicator          : 1;
-     unsigned section_number                  : 8;
-     unsigned last_section_number             : 8;
-     unsigned reserved_3                      : 3;
-     unsigned PCR_PID                         : 13;
-     unsigned reserved_4                      : 4;
-     unsigned program_info_length             : 12;
-     unsigned CRC_32                          : 32;
-     std::vector<TsPMTMapEntry> stream_id_map_entries;
-public:
-     int Parse(unsigned char *pTSData);
-} ;
+
+
 
 class TsPacket : public Parser
 {

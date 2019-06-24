@@ -1,1 +1,3 @@
 从文件读取两路视频和音频然后合为一个mp4或者ts等格式的文件
+
+doc/examples/remuxing.c 就是一个把一种container转换为另外一种contaner的例子
